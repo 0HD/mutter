@@ -1,0 +1,41 @@
+# Build outputs
+build/
+out/
+_dependencies/
+vcpkg_installed/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/Generated.xcconfig
+**/generated_config.h
+
+# Flutter / Dart
+app/.dart_tool/
+app/build/
+app/windows/flutter/ephemeral/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/pubspec.lock
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.iml
+*.user
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Generated binaries
+*.obj
+*.lib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.tlog
