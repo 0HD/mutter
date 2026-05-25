@@ -20,15 +20,16 @@ Requires:
 - Flutter 3.35+
 - `nuget.exe` on PATH (`winget install -e --id Microsoft.NuGet`)
 - Windows Developer Mode enabled
-- libmumble checked out next to this repo
 
-```
-parent/
-├── mutter/
-└── libmumble-master/   (from https://github.com/mumble-voip/libmumble)
+Clone with submodules (libmumble is a submodule under `third_party/`):
+
+```powershell
+git clone --recurse-submodules https://github.com/0HD/mutter.git
+# or, on an existing clone:
+git submodule update --init --recursive
 ```
 
-Then:
+Then build:
 
 ```powershell
 pwsh scripts/build_libmumble.ps1

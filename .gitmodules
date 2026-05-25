@@ -1,0 +1,3 @@
+[submodule "third_party/libmumble"]
+	path = third_party/libmumble
+	url = https://github.com/mumble-voip/libmumble.git
