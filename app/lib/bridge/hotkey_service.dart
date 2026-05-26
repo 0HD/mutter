@@ -1,83 +1,58 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 
 import '../settings/app_settings.dart';
-import 'bridge_service.dart';
+import 'bindings.dart' as nb;
 
-/// Registers a system-wide hotkey for push-to-talk. Pressed = transmitting;
-/// released = silent. The PTT key is read from settings and re-registered
-/// whenever it changes.
+/// Routes the push-to-talk binding to a system-wide low-level keyboard hook
+/// installed by the native bridge. We can't use Windows' RegisterHotKey for
+/// PTT because it only delivers presses, not releases — the bridge's
+/// WH_KEYBOARD_LL hook sees both edges of the key.
 class HotkeyService {
   HotkeyService(this._ref);
   final Ref _ref;
-  HotKey? _pttHotkey;
+  int _installedVk = 0;
 
-  Future<void> initialize() async {
-    await hotKeyManager.unregisterAll();
-    await _applyFromSettings();
-    _ref.listen<AppSettings>(settingsProvider, (prev, next) async {
+  void initialize() {
+    _applyFromSettings();
+    _ref.listen<AppSettings>(settingsProvider, (prev, next) {
       if (prev?.pttKey != next.pttKey || prev?.txMode != next.txMode) {
-        await _applyFromSettings();
+        _applyFromSettings();
       }
     });
   }
 
-  Future<void> _applyFromSettings() async {
+  void _applyFromSettings() {
     final settings = _ref.read(settingsProvider);
-    // Unregister any existing PTT binding.
-    if (_pttHotkey != null) {
-      try {
-        await hotKeyManager.unregister(_pttHotkey!);
-      } catch (_) {/* ignore */}
-      _pttHotkey = null;
-    }
-    // Only register the hotkey when the user is actually using PTT.
-    if (settings.txMode != TxMode.ptt) return;
-    final code = _physicalKeyFromName(settings.pttKey);
-    if (code == null) return;
-    final hk = HotKey(
-      key: code,
-      scope: HotKeyScope.system,
-    );
-    try {
-      await hotKeyManager.register(
-        hk,
-        keyDownHandler: (_) => _ref.read(bridgeProvider).setPttPressed(true),
-        keyUpHandler: (_) => _ref.read(bridgeProvider).setPttPressed(false),
-      );
-      _pttHotkey = hk;
-    } catch (_) {
-      // Common failure: the key combination is already registered by another
-      // process, or the user picked a key that needs a modifier. Silent
-      // fallback — settings UI will let them pick another.
-    }
+    final vk = settings.txMode == TxMode.ptt
+        ? _vkFromName(settings.pttKey) ?? 0
+        : 0;
+    if (vk == _installedVk) return;
+    nb.mbInstallPttHook(vk);
+    _installedVk = vk;
   }
 
-  PhysicalKeyboardKey? _physicalKeyFromName(String name) {
-    // Common single-key PTT bindings. hotkey_manager expects PhysicalKeyboardKey
-    // (from flutter/services). We expose a small whitelist that's safe to use
-    // as a system hotkey without modifiers.
-    const map = <String, PhysicalKeyboardKey>{
-      'KeyV': PhysicalKeyboardKey.keyV,
-      'KeyB': PhysicalKeyboardKey.keyB,
-      'KeyT': PhysicalKeyboardKey.keyT,
-      'KeyZ': PhysicalKeyboardKey.keyZ,
-      'KeyX': PhysicalKeyboardKey.keyX,
-      'KeyC': PhysicalKeyboardKey.keyC,
-      'Space': PhysicalKeyboardKey.space,
-      'F1': PhysicalKeyboardKey.f1,
-      'F2': PhysicalKeyboardKey.f2,
-      'F3': PhysicalKeyboardKey.f3,
-      'F4': PhysicalKeyboardKey.f4,
-      'F5': PhysicalKeyboardKey.f5,
-      'F6': PhysicalKeyboardKey.f6,
-      'F7': PhysicalKeyboardKey.f7,
-      'F8': PhysicalKeyboardKey.f8,
-    };
-    return map[name];
-  }
+  /// Maps the dropdown's PTT-key name to a Windows virtual-key code.
+  static int? _vkFromName(String name) => _vkMap[name];
 }
+
+const Map<String, int> _vkMap = {
+  // Letters
+  'KeyV': 0x56,
+  'KeyB': 0x42,
+  'KeyT': 0x54,
+  'KeyZ': 0x5A,
+  'KeyX': 0x58,
+  'KeyC': 0x43,
+  'Space': 0x20,
+  'F1': 0x70,
+  'F2': 0x71,
+  'F3': 0x72,
+  'F4': 0x73,
+  'F5': 0x74,
+  'F6': 0x75,
+  'F7': 0x76,
+  'F8': 0x77,
+};
 
 /// Convenience list shown by the settings UI.
 const pttKeyChoices = [

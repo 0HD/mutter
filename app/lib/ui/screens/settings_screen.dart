@@ -397,7 +397,13 @@ class _VoiceSection extends StatelessWidget {
                               fontWeight: FontWeight.w600)),
                     ),
                     DropdownButton<String>(
-                      value: settings.pttKey,
+                      // Fall back to the first choice if the saved value
+                      // isn't in our whitelist (older settings file, manual
+                      // edit, etc.) — DropdownButton asserts the value
+                      // matches one of its items.
+                      value: pttKeyChoices.contains(settings.pttKey)
+                          ? settings.pttKey
+                          : pttKeyChoices.first,
                       dropdownColor: AppColors.bg2,
                       underline: const SizedBox.shrink(),
                       style: const TextStyle(

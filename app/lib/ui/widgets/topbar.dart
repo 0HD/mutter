@@ -63,8 +63,7 @@ class TopBar extends ConsumerWidget {
                   color: AppColors.textDim,
                   letterSpacing: 0.2)),
           const Spacer(),
-          if (conn.isConnected) const _PingBadge(),
-          if (conn.isConnected) const SizedBox(width: 6),
+          if (conn.isConnected) ...const [_PingBadge(), SizedBox(width: 6)],
           _IconBtn(
               icon: Icons.settings_rounded,
               tooltip: 'Settings',
@@ -99,14 +98,9 @@ class _PingBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final q = ref.watch(connectionQualityProvider);
-    if (!q.hasData) {
-      return const SizedBox(
-        width: 56,
-        child: Text('…',
-            textAlign: TextAlign.right,
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-      );
-    }
+    // While we wait for the first server Ping (every ~5–15 s) just don't
+    // show anything — better than a confusing "—" placeholder.
+    if (!q.hasData) return const SizedBox.shrink();
     final ping = q.tcpPingMs.round();
     final loss = (q.lossRatio * 100).round();
     final color = ping < 60
@@ -115,7 +109,7 @@ class _PingBadge extends ConsumerWidget {
             ? AppColors.warning
             : AppColors.muted;
     return Tooltip(
-      message: 'TCP ping ${q.tcpPingMs.toStringAsFixed(1)} ms\n'
+      message: 'Ping ${q.tcpPingMs.toStringAsFixed(1)} ms\n'
           'packets — good ${q.good}, late ${q.late}, lost ${q.lost}',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -133,7 +127,7 @@ class _PingBadge extends ConsumerWidget {
               decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
             const SizedBox(width: 6),
-            Text('${ping}ms',
+            Text('$ping ms',
                 style: const TextStyle(
                     color: AppColors.text,
                     fontSize: 11.5,

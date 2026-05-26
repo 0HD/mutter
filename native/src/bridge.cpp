@@ -830,6 +830,58 @@ void mb_set_ptt_pressed(bool pressed) {
     if (s.audio) s.audio->setTransmitting(should_transmit());
 }
 
+namespace {
+// Low-level keyboard hook for PTT. Windows' RegisterHotKey only delivers
+// presses, not releases, so it can't drive a hold-to-talk button. A WH_KEYBOARD_LL
+// hook sees both edges. Caveat: the thread that installs the hook must pump
+// messages — we install it from the Dart main thread (via FFI from
+// mb_install_ptt_hook) which has Flutter's message loop, so callbacks fire.
+HHOOK g_ptt_hook = nullptr;
+std::atomic<int> g_ptt_vk{0};
+
+LRESULT CALLBACK ptt_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
+    if (code == HC_ACTION) {
+        const auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lparam);
+        const int wantedVk = g_ptt_vk.load();
+        if (wantedVk != 0 && static_cast<int>(kb->vkCode) == wantedVk) {
+            auto& s = S();
+            if (wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN) {
+                if (!s.ptt_pressed.exchange(true)) {
+                    if (s.audio) s.audio->setTransmitting(should_transmit());
+                }
+            } else if (wparam == WM_KEYUP || wparam == WM_SYSKEYUP) {
+                if (s.ptt_pressed.exchange(false)) {
+                    if (s.audio) s.audio->setTransmitting(should_transmit());
+                }
+            }
+        }
+    }
+    return CallNextHookEx(g_ptt_hook, code, wparam, lparam);
+}
+} // anonymous namespace
+
+int mb_install_ptt_hook(int vk_code) {
+    g_ptt_vk.store(vk_code);
+    if (vk_code == 0) {
+        if (g_ptt_hook) {
+            UnhookWindowsHookEx(g_ptt_hook);
+            g_ptt_hook = nullptr;
+        }
+        // Also drop any sticky pressed state.
+        auto& s = S();
+        if (s.ptt_pressed.exchange(false) && s.audio) {
+            s.audio->setTransmitting(should_transmit());
+        }
+        return MB_OK;
+    }
+    if (!g_ptt_hook) {
+        g_ptt_hook = SetWindowsHookExW(WH_KEYBOARD_LL, ptt_hook_proc,
+                                       GetModuleHandleW(nullptr), 0);
+        if (!g_ptt_hook) return MB_ERR_INTERNAL;
+    }
+    return MB_OK;
+}
+
 void  mb_set_vad_threshold(float)                            {}
 void  mb_set_voice_hold_ms(uint32_t)                         {}
 

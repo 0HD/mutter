@@ -169,6 +169,12 @@ final _MbSetTxModeDart mbSetTxMode =
 final _MbSetBoolDart mbSetPttPressed =
     _lib.lookupFunction<_MbSetBoolC, _MbSetBoolDart>('mb_set_ptt_pressed');
 
+typedef _MbInstallPttHookC = Int32 Function(Int32);
+typedef _MbInstallPttHookDart = int Function(int);
+final _MbInstallPttHookDart mbInstallPttHook =
+    _lib.lookupFunction<_MbInstallPttHookC, _MbInstallPttHookDart>(
+        'mb_install_ptt_hook');
+
 final _MbSetFloatDart mbSetVadThreshold =
     _lib.lookupFunction<_MbSetFloatC, _MbSetFloatDart>('mb_set_vad_threshold');
 

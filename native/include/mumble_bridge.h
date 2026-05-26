@@ -134,6 +134,12 @@ MB_API void mb_set_tx_mode(mb_tx_mode mode);
 // For PTT: report the current pressed state of the bound key.
 MB_API void mb_set_ptt_pressed(bool pressed);
 
+// Install a system-wide low-level keyboard hook that drives PTT directly:
+// pressing `vk_code` flips ptt-pressed true, releasing it flips to false.
+// This bypasses RegisterHotKey (which doesn't report key-up events). Pass
+// vk_code = 0 to uninstall any existing hook. Returns MB_OK on success.
+MB_API int mb_install_ptt_hook(int vk_code);
+
 // VAD threshold in [0,1]; higher = harder to trigger.
 MB_API void mb_set_vad_threshold(float threshold);
 
