@@ -1,7 +1,7 @@
 # Patches the user's libmumble checkout in place. Idempotent: re-running on
 # an already-patched tree is a no-op.
 #
-# The three changes:
+# Four changes:
 #
 #   1. include/mumble/Key.hpp: add a missing <string> include. The newer MSVC
 #      STL no longer pulls it in transitively via <string_view>, so the
@@ -11,13 +11,19 @@
 #      FetchContent_Declare. Shallow git clones can't reach a specific commit
 #      hash that isn't at a branch tip, which is exactly the pinned commit.
 #
-#   3. src/Pack.cpp: rewrite the UserState case in the TCP message serializer
-#      so it only sets protobuf fields the caller actually populated. The
-#      upstream version sends every default sentinel (UINT32_MAX for IDs,
-#      empty strings, all admin booleans), which Mumble servers reject with
-#      PermissionDenied on every self-state update.
+#   3. src/Pack.cpp serialize: only set UserState fields the caller actually
+#      populated, otherwise Mumble servers reject the message with
+#      PermissionDenied (e.g. channel_id = UINT32_MAX is read as "move me to
+#      channel UINT32_MAX").
 #
-# All three are real bug fixes against current libmumble and worth upstreaming.
+#   4. include/mumble/Message.hpp + src/Pack.cpp deserialize: store the
+#      UserState boolean state fields as std::optional<bool> instead of plain
+#      bool, and respect protobuf's has_X() on parse. Without this, a server-
+#      sent delta (say, "recording=true") arrives with all other booleans
+#      defaulting to false, which the client reads as "the user just unmuted
+#      and undeafened" and clears their status icons.
+#
+# All four are real bug fixes worth upstreaming.
 
 $ErrorActionPreference = 'Continue'
 
@@ -129,4 +135,130 @@ $changed = Update-FileText -Path $packCpp -Transform {
     }
     return $out
 }
-if ($changed) { Write-Host 'patched src/Pack.cpp' -ForegroundColor Cyan }
+if ($changed) { Write-Host 'patched src/Pack.cpp (UserState serializer)' -ForegroundColor Cyan }
+
+# Patch 4a: store UserState bools as optional<bool> in the public Message struct.
+$messageHpp = Join-Path $libmumble 'include\mumble\Message.hpp'
+
+$userStateBoolOld = @'
+		uint32_t channelID                               = UINT32_MAX;
+		bool mute                                        = false;
+		bool deaf                                        = false;
+		bool suppress                                    = false;
+		bool selfMute                                    = false;
+		bool selfDeaf                                    = false;
+'@ -replace "`r`n", "`n"
+
+$userStateBoolNew = @'
+		uint32_t channelID                               = UINT32_MAX;
+		std::optional< bool > mute                       = {};
+		std::optional< bool > deaf                       = {};
+		std::optional< bool > suppress                   = {};
+		std::optional< bool > selfMute                   = {};
+		std::optional< bool > selfDeaf                   = {};
+'@ -replace "`r`n", "`n"
+
+$prsRecOld = @'
+		bool prioritySpeaker                             = false;
+		bool recording                                   = false;
+'@ -replace "`r`n", "`n"
+
+$prsRecNew = @'
+		std::optional< bool > prioritySpeaker            = {};
+		std::optional< bool > recording                  = {};
+'@ -replace "`r`n", "`n"
+
+$changed = Update-FileText -Path $messageHpp -Transform {
+    param($c)
+    $changed = $false
+    if ($c.Contains($userStateBoolOld)) {
+        $c = $c.Replace($userStateBoolOld, $userStateBoolNew)
+        $changed = $true
+    }
+    if ($c.Contains($prsRecOld)) {
+        $c = $c.Replace($prsRecOld, $prsRecNew)
+        $changed = $true
+    }
+    if ($changed) { return $c } else { return $null }
+}
+if ($changed) { Write-Host 'patched include/mumble/Message.hpp (UserState optionals)' -ForegroundColor Cyan }
+
+# Patch 4b: serialize uses has_value(); deserialize uses proto.has_X().
+$packSerOldB = @'
+			proto.set_self_mute(msg.selfMute);
+			proto.set_self_deaf(msg.selfDeaf);
+'@ -replace "`r`n", "`n"
+
+$packSerNewB = @'
+			if (msg.selfMute.has_value())  proto.set_self_mute(*msg.selfMute);
+			if (msg.selfDeaf.has_value())  proto.set_self_deaf(*msg.selfDeaf);
+'@ -replace "`r`n", "`n"
+
+$packSerOldC = @'
+			if (msg.mute)                                                proto.set_mute(true);
+			if (msg.deaf)                                                proto.set_deaf(true);
+			if (msg.suppress)                                            proto.set_suppress(true);
+'@ -replace "`r`n", "`n"
+
+$packSerNewC = @'
+			if (msg.mute.has_value())      proto.set_mute(*msg.mute);
+			if (msg.deaf.has_value())      proto.set_deaf(*msg.deaf);
+			if (msg.suppress.has_value())  proto.set_suppress(*msg.suppress);
+'@ -replace "`r`n", "`n"
+
+$packSerOldD = @'
+			if (msg.prioritySpeaker)         proto.set_priority_speaker(true);
+			if (msg.recording)               proto.set_recording(true);
+'@ -replace "`r`n", "`n"
+
+$packSerNewD = @'
+			if (msg.prioritySpeaker.has_value()) proto.set_priority_speaker(*msg.prioritySpeaker);
+			if (msg.recording.has_value())       proto.set_recording(*msg.recording);
+'@ -replace "`r`n", "`n"
+
+$packDesOldA = @'
+			msg.channelID = proto.channel_id();
+			msg.mute      = proto.mute();
+			msg.deaf      = proto.deaf();
+			msg.suppress  = proto.suppress();
+			msg.selfMute  = proto.self_mute();
+			msg.selfDeaf  = proto.self_deaf();
+'@ -replace "`r`n", "`n"
+
+$packDesNewA = @'
+			msg.channelID = proto.channel_id();
+			if (proto.has_mute())      msg.mute      = proto.mute();      else msg.mute.reset();
+			if (proto.has_deaf())      msg.deaf      = proto.deaf();      else msg.deaf.reset();
+			if (proto.has_suppress())  msg.suppress  = proto.suppress();  else msg.suppress.reset();
+			if (proto.has_self_mute()) msg.selfMute  = proto.self_mute(); else msg.selfMute.reset();
+			if (proto.has_self_deaf()) msg.selfDeaf  = proto.self_deaf(); else msg.selfDeaf.reset();
+'@ -replace "`r`n", "`n"
+
+$packDesOldB = @'
+			msg.prioritySpeaker = proto.priority_speaker();
+			msg.recording       = proto.recording();
+'@ -replace "`r`n", "`n"
+
+$packDesNewB = @'
+			if (proto.has_priority_speaker()) msg.prioritySpeaker = proto.priority_speaker(); else msg.prioritySpeaker.reset();
+			if (proto.has_recording())        msg.recording       = proto.recording();        else msg.recording.reset();
+'@ -replace "`r`n", "`n"
+
+$changed = Update-FileText -Path $packCpp -Transform {
+    param($c)
+    $changed = $false
+    foreach ($pair in @(
+        @($packSerOldB, $packSerNewB),
+        @($packSerOldC, $packSerNewC),
+        @($packSerOldD, $packSerNewD),
+        @($packDesOldA, $packDesNewA),
+        @($packDesOldB, $packDesNewB)
+    )) {
+        if ($c.Contains($pair[0])) {
+            $c = $c.Replace($pair[0], $pair[1])
+            $changed = $true
+        }
+    }
+    if ($changed) { return $c } else { return $null }
+}
+if ($changed) { Write-Host 'patched src/Pack.cpp (UserState optionals)' -ForegroundColor Cyan }

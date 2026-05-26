@@ -11,8 +11,9 @@ if (-not (Test-Path (Join-Path $libmumble 'CMakeLists.txt'))) {
 # Apply our overlay patches (Key.hpp <string> include, quickpool GIT_SHALLOW
 # removal, UserState serializer fix). See patches/libmumble/ and
 # apply_libmumble_patches.ps1 for what each one does.
+# $LASTEXITCODE isn't set by pure PowerShell scripts so we can't check it
+# here — apply_libmumble_patches.ps1 throws on real errors itself.
 & "$PSScriptRoot\apply_libmumble_patches.ps1"
-if ($LASTEXITCODE -ne 0) { throw 'Failed to apply libmumble patches' }
 
 $vsRoot = & 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe' `
               -latest -property installationPath

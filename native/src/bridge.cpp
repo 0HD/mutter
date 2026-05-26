@@ -107,6 +107,8 @@ struct BridgeState {
     std::thread ping_thread;
     std::atomic<bool> halting{false};
     std::atomic<bool> ping_stop{false};
+    std::condition_variable ping_wake;
+    std::mutex ping_mu;
 
     std::string username;
     std::string password;
@@ -122,6 +124,11 @@ struct BridgeState {
     std::atomic<uint32_t> opus_bitrate{32000};
     std::atomic<int> tx_mode{0};   // 0 = continuous, 1 = VAD, 2 = PTT (matches mb_tx_mode enum)
     std::atomic<bool> ptt_pressed{false};
+
+    // Per-session "is currently talking" state — used to deduplicate the
+    // user_talking events emitted on UDP audio packet arrival.
+    std::mutex talking_mu;
+    std::unordered_map<uint32_t, bool> talking;
 };
 
 BridgeState& S() {
@@ -317,20 +324,57 @@ void dispatch_pack(mumble::tcp::Pack& pack) {
         case Type::UserState: {
             mumble::tcp::Message::UserState m;
             if (!pack(m)) return;
-            std::string j = "{\"type\":\"user_state\",";
-            appendJsonU32(j, "session", m.session); j += ",";
-            appendJsonU32(j, "channelId", m.channelID); j += ",";
-            appendJsonString(j, "name", m.name); j += ",";
-            appendJsonBool(j, "mute", m.mute); j += ",";
-            appendJsonBool(j, "deaf", m.deaf); j += ",";
-            appendJsonBool(j, "selfMute", m.selfMute); j += ",";
-            appendJsonBool(j, "selfDeaf", m.selfDeaf); j += ",";
-            appendJsonBool(j, "suppress", m.suppress); j += ",";
-            appendJsonBool(j, "prioritySpeaker", m.prioritySpeaker); j += ",";
-            appendJsonBool(j, "recording", m.recording); j += ",";
-            appendJsonString(j, "comment", m.comment);
+            // Emit fields only when the protobuf actually carried them — a
+            // partial server update (e.g. just "recording=true") would
+            // otherwise be read by the Dart side as also clearing mute/deaf.
+            std::string j = "{\"type\":\"user_state\"";
+            j += ",";  appendJsonU32(j, "session", m.session);
+            if (m.channelID != UINT32_MAX) {
+                j += ",";  appendJsonU32(j, "channelId", m.channelID);
+            }
+            if (!m.name.empty()) {
+                j += ",";  appendJsonString(j, "name", m.name);
+            }
+            if (m.mute.has_value()) {
+                j += ",";  appendJsonBool(j, "mute", *m.mute);
+            }
+            if (m.deaf.has_value()) {
+                j += ",";  appendJsonBool(j, "deaf", *m.deaf);
+            }
+            if (m.selfMute.has_value()) {
+                j += ",";  appendJsonBool(j, "selfMute", *m.selfMute);
+            }
+            if (m.selfDeaf.has_value()) {
+                j += ",";  appendJsonBool(j, "selfDeaf", *m.selfDeaf);
+            }
+            if (m.suppress.has_value()) {
+                j += ",";  appendJsonBool(j, "suppress", *m.suppress);
+            }
+            if (m.prioritySpeaker.has_value()) {
+                j += ",";  appendJsonBool(j, "prioritySpeaker", *m.prioritySpeaker);
+            }
+            if (m.recording.has_value()) {
+                j += ",";  appendJsonBool(j, "recording", *m.recording);
+            }
+            if (!m.comment.empty()) {
+                j += ",";  appendJsonString(j, "comment", m.comment);
+            }
             j += "}";
             post_json(j);
+            // If this update told us the user is now muted/deafened (by
+            // themselves or by an admin), clear the per-session talking flag.
+            // Otherwise the first audio packet they send after unmuting won't
+            // emit user_talking=true because our transition tracker still
+            // remembers them as "already talking".
+            const bool nowMuted =
+                (m.mute.has_value() && *m.mute) ||
+                (m.selfMute.has_value() && *m.selfMute) ||
+                (m.deaf.has_value() && *m.deaf) ||
+                (m.selfDeaf.has_value() && *m.selfDeaf);
+            if (nowMuted) {
+                std::lock_guard<std::mutex> lk(S().talking_mu);
+                S().talking[m.session] = false;
+            }
             break;
         }
         case Type::UserRemove: {
@@ -420,16 +464,14 @@ void dispatch_pack(mumble::tcp::Pack& pack) {
                 // Speaking indicator: emit a user_talking event only on
                 // transitions so we don't flood the Dart isolate with one
                 // event per 10ms packet.
-                static std::unordered_map<uint32_t, bool> talking;
-                static std::mutex talking_mu;
                 const uint32_t sess = *audio.senderSession;
                 const bool nowTalking = !audio.isTerminator;
                 bool emit = false;
                 {
-                    std::lock_guard<std::mutex> lk(talking_mu);
-                    auto it = talking.find(sess);
-                    if (it == talking.end() || it->second != nowTalking) {
-                        talking[sess] = nowTalking;
+                    std::lock_guard<std::mutex> lk(s.talking_mu);
+                    auto it = s.talking.find(sess);
+                    if (it == s.talking.end() || it->second != nowTalking) {
+                        s.talking[sess] = nowTalking;
                         emit = true;
                     }
                 }
@@ -494,12 +536,15 @@ void start_ping_thread() {
     s.ping_thread = std::thread([]() {
         auto& s = S();
         while (!s.ping_stop.load()) {
-            for (int i = 0; i < 10 && !s.ping_stop.load(); ++i) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-            }
+            // Wait up to 5 seconds, but wake immediately if stop is signalled —
+            // sleep_for would otherwise keep disconnect blocked for the full
+            // interval. (5s matches the Mumble protocol recommendation so
+            // the server's TCP-ping average is accurate.)
+            std::unique_lock<std::mutex> lk(s.ping_mu);
+            s.ping_wake.wait_for(lk, std::chrono::seconds(5),
+                                 [&s] { return s.ping_stop.load(); });
+            lk.unlock();
             if (s.ping_stop.load()) break;
-            // Send a Mumble protocol Ping. The struct defaults are fine —
-            // the server doesn't strictly require any field to be non-zero.
             mumble::tcp::Message::Ping ping;
             send_message(ping);
         }
@@ -509,6 +554,7 @@ void start_ping_thread() {
 void stop_ping_thread() {
     auto& s = S();
     s.ping_stop.store(true);
+    s.ping_wake.notify_all();
     if (s.ping_thread.joinable()) s.ping_thread.join();
 }
 
@@ -790,7 +836,7 @@ void mb_set_self_mute(bool mute) {
     if (s.audio) s.audio->setMuted(mute);
     mumble::tcp::Message::UserState m;
     m.session = s.local_session;
-    m.selfMute = mute;
+    m.selfMute = mute;  // optional<bool> assignment from bool
     send_message(m);
 }
 
