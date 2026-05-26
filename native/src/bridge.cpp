@@ -116,6 +116,10 @@ struct BridgeState {
     std::unique_ptr<AudioEngine> audio;
     std::atomic<bool> self_mute{false};
     std::atomic<bool> self_deaf{false};
+    std::atomic<bool> duck_others{true};
+    std::atomic<float> input_gain_db{0.0f};
+    std::atomic<float> output_gain_db{0.0f};
+    std::atomic<uint32_t> opus_bitrate{32000};
 };
 
 BridgeState& S() {
@@ -460,8 +464,12 @@ void start_audio_engine() {
     auto& s = S();
     if (s.audio) return;
     s.audio = std::make_unique<AudioEngine>();
+    s.audio->setDuckOthers(s.duck_others.load());
     s.audio->setMuted(s.self_mute.load());
     s.audio->setDeafened(s.self_deaf.load());
+    s.audio->setInputGainDb(s.input_gain_db.load());
+    s.audio->setOutputGainDb(s.output_gain_db.load());
+    s.audio->setOpusBitrate(s.opus_bitrate.load());
     if (!s.audio->start(send_audio_via_tunnel)) {
         s.audio.reset();
         // Surface the failure but don't sever the connection — text-only is
@@ -766,13 +774,41 @@ char* mb_list_input_devices(void)                            { return nullptr; }
 char* mb_list_output_devices(void)                           { return nullptr; }
 int   mb_set_input_device(const char*)                       { return MB_OK; }
 int   mb_set_output_device(const char*)                      { return MB_OK; }
-void  mb_set_input_gain_db(float)                            {}
-void  mb_set_output_gain_db(float)                           {}
+
+void mb_set_input_gain_db(float db) {
+    auto& s = S();
+    s.input_gain_db.store(db);
+    if (s.audio) s.audio->setInputGainDb(db);
+}
+
+void mb_set_output_gain_db(float db) {
+    auto& s = S();
+    s.output_gain_db.store(db);
+    if (s.audio) s.audio->setOutputGainDb(db);
+}
+
 void  mb_set_user_gain_db(uint32_t, float)                   {}
 void  mb_set_noise_suppression(bool)                         {}
 void  mb_set_attenuate_others_db(float)                      {}
-void  mb_set_opus_bitrate(uint32_t)                          {}
+
+void mb_set_opus_bitrate(uint32_t bps) {
+    auto& s = S();
+    s.opus_bitrate.store(bps);
+    if (s.audio) s.audio->setOpusBitrate(bps);
+}
+
 void  mb_set_opus_frames_per_packet(uint32_t)                {}
+
+void mb_set_audio_ducking(bool duck) {
+    auto& s = S();
+    const bool was = s.duck_others.exchange(duck);
+    if (was == duck) return;
+    if (s.audio) {
+        s.audio->stop();
+        s.audio.reset();
+        start_audio_engine();
+    }
+}
 
 void  mb_voice_target_clear(uint8_t)                         {}
 void  mb_voice_target_add_users(uint8_t, const uint32_t*, size_t) {}

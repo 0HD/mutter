@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/connection_state.dart';
+import '../screens/settings_screen.dart';
 import '../theme/app_theme.dart';
 
 class TopBar extends ConsumerWidget {
@@ -64,7 +65,25 @@ class TopBar extends ConsumerWidget {
           _IconBtn(
               icon: Icons.settings_rounded,
               tooltip: 'Settings',
-              onTap: () {}),
+              onTap: () => Navigator.of(context).push(
+                    PageRouteBuilder(
+                      pageBuilder: (_, __, ___) => const SettingsScreen(),
+                      transitionsBuilder: (_, anim, __, child) {
+                        return FadeTransition(
+                          opacity: anim,
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 0.02),
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(
+                                parent: anim, curve: Curves.easeOut)),
+                            child: child,
+                          ),
+                        );
+                      },
+                      transitionDuration: const Duration(milliseconds: 200),
+                    ),
+                  )),
         ],
       ),
     );

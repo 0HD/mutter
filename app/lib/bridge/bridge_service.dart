@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../settings/app_settings.dart';
 import '../state/channel_state.dart';
 import '../state/chat_state.dart';
 import '../state/connection_state.dart';
@@ -30,6 +31,19 @@ class BridgeService {
     _eventPort = ReceivePort('mutter.bridge.events');
     _eventPort!.listen(_onEvent);
     nb.mbSetEventPort(_eventPort!.sendPort.nativePort);
+
+    // Push the current settings into the bridge and react to future edits.
+    _applySettings(_ref.read(settingsProvider));
+    _ref.listen<AppSettings>(settingsProvider, (prev, next) {
+      _applySettings(next);
+    });
+  }
+
+  void _applySettings(AppSettings s) {
+    nb.mbSetAudioDucking(s.duckOtherApps);
+    nb.mbSetInputGainDb(s.inputGainDb);
+    nb.mbSetOutputGainDb(s.outputGainDb);
+    nb.mbSetOpusBitrate(s.opusBitrateKbps * 1000);
   }
 
   void dispose() {
@@ -88,6 +102,11 @@ class BridgeService {
 
   void setSelfMute(bool mute) => nb.mbSetSelfMute(mute);
   void setSelfDeaf(bool deaf) => nb.mbSetSelfDeaf(deaf);
+
+  void setAudioDucking(bool duck) => nb.mbSetAudioDucking(duck);
+  void setInputGainDb(double db) => nb.mbSetInputGainDb(db);
+  void setOutputGainDb(double db) => nb.mbSetOutputGainDb(db);
+  void setOpusBitrate(int bps) => nb.mbSetOpusBitrate(bps);
 
   void sendChannelMessage(int channelId, String text, {bool tree = false}) {
     final p = text.toNativeUtf8();

@@ -40,10 +40,20 @@ public:
     bool start(OutgoingCallback outgoing);
     void stop();
 
+    // Whether to use the COMMUNICATIONS endpoint role for the WASAPI streams
+    // (which causes Windows to duck other apps' audio while we're open). Must
+    // be set BEFORE start() — runtime changes require a stop()/start() cycle.
+    void setDuckOthers(bool duck) { _duckOthers = duck; }
+    bool duckOthers() const { return _duckOthers; }
+
     void setMuted(bool muted)     { _muted.store(muted); }
     void setDeafened(bool deaf)   { _deafened.store(deaf); }
     void setInputGainDb(float db) { _inputGain.store(linearFromDb(db)); }
     void setOutputGainDb(float db){ _outputGain.store(linearFromDb(db)); }
+    void setOpusBitrate(uint32_t bps) {
+        _opusBitrate = bps;
+        if (_encoder) _encoder->setBitrate(bps);
+    }
 
     bool muted()    const { return _muted.load(); }
     bool deafened() const { return _deafened.load(); }
@@ -76,6 +86,8 @@ private:
     std::atomic<bool> _deafened{false};
     std::atomic<float> _inputGain{1.0f};
     std::atomic<float> _outputGain{1.0f};
+    bool _duckOthers{true};
+    uint32_t _opusBitrate{32000};
 
     std::thread _captureThread;
     std::thread _renderThread;

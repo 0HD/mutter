@@ -213,6 +213,9 @@ final _MbSetUserGainDart mbSetUserGainDb =
 final _MbSetBoolDart mbSetNoiseSuppression =
     _lib.lookupFunction<_MbSetBoolC, _MbSetBoolDart>('mb_set_noise_suppression');
 
+final _MbSetBoolDart mbSetAudioDucking =
+    _lib.lookupFunction<_MbSetBoolC, _MbSetBoolDart>('mb_set_audio_ducking');
+
 final _MbSetFloatDart mbSetAttenuateOthersDb =
     _lib.lookupFunction<_MbSetFloatC, _MbSetFloatDart>('mb_set_attenuate_others_db');
 

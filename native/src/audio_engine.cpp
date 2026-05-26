@@ -128,7 +128,7 @@ bool AudioEngine::start(OutgoingCallback outgoing) {
         _running.store(false);
         return false;
     }
-    _encoder->setBitrate(32000);
+    _encoder->setBitrate(_opusBitrate);
     _encoder->toggleVBR(true);
 
     _captureThread = std::thread(&AudioEngine::captureLoop, this);
@@ -243,9 +243,13 @@ void AudioEngine::captureLoop() {
         cleanup(); return;
     }
 
-    // Try eCommunications first (preferred for voice), fall back to eConsole.
-    hr = enumerator->GetDefaultAudioEndpoint(eCapture, eCommunications, &device);
-    if (FAILED(hr) || !device) {
+    // ERole controls Windows' "this is a communications app" ducking behaviour.
+    // eCommunications => Windows ducks other apps while we're open.
+    // eConsole        => no ducking.
+    const ERole role = _duckOthers ? eCommunications : eConsole;
+    hr = enumerator->GetDefaultAudioEndpoint(eCapture, role, &device);
+    if ((FAILED(hr) || !device) && role == eCommunications) {
+        // Some systems don't register a communications capture endpoint.
         hr = enumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &device);
     }
     if (FAILED(hr) || !device) {
@@ -404,8 +408,9 @@ void AudioEngine::renderLoop() {
         audio_log(buf);
         cleanup(); return;
     }
-    hr = enumerator->GetDefaultAudioEndpoint(eRender, eCommunications, &device);
-    if (FAILED(hr) || !device) {
+    const ERole role = _duckOthers ? eCommunications : eConsole;
+    hr = enumerator->GetDefaultAudioEndpoint(eRender, role, &device);
+    if ((FAILED(hr) || !device) && role == eCommunications) {
         hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
     }
     if (FAILED(hr) || !device) {

@@ -165,6 +165,13 @@ MB_API void mb_set_noise_suppression(bool enabled);
 // Attenuate other users while you are talking, by `db` dB (negative = quieter).
 MB_API void mb_set_attenuate_others_db(float db);
 
+// Whether to use the Windows "communications" endpoint role for the mic and
+// speakers. When true (default), Windows automatically ducks other apps'
+// audio while we're using the device (matches Mumble / Discord / Teams).
+// When false, we use the "console" endpoint role and don't trigger ducking.
+// Changing this restarts the audio engine if it's running.
+MB_API void mb_set_audio_ducking(bool duck);
+
 // Opus encoder settings.
 MB_API void mb_set_opus_bitrate(uint32_t bps);            // e.g. 24000..96000
 MB_API void mb_set_opus_frames_per_packet(uint32_t n);    // 1..6 (10ms each)
