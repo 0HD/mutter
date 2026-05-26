@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../bridge/bridge_service.dart';
+import '../../bridge/lan_discovery.dart';
 import '../../settings/app_settings.dart';
 import '../theme/app_theme.dart';
 
@@ -52,23 +53,33 @@ class _ConnectDialogState extends ConsumerState<ConnectDialog> {
   @override
   Widget build(BuildContext context) {
     final favorites = ref.watch(settingsProvider).favorites;
+    final lan = ref.watch(lanDiscoveryProvider);
     return Dialog(
       backgroundColor: AppColors.bg2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 540),
+        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 560),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _FavoritesList(
+            _SidebarList(
               favorites: favorites,
-              onPick: _applyFavorite,
-              onRemove: (f) {
+              lanServers: lan,
+              onPickFavorite: _applyFavorite,
+              onPickLan: (s) => _applyFavorite(ServerFavorite(
+                name: s.displayName,
+                host: s.address,
+                port: s.port,
+              )),
+              onRemoveFavorite: (f) {
                 final notifier = ref.read(settingsProvider.notifier);
                 notifier.update((s) => s.copyWith(
                       favorites: s.favorites.where((x) => x != f).toList(),
                     ));
               },
+              onRescanLan: () => ref
+                  .read(lanDiscoveryProvider.notifier)
+                  .scan(),
             ),
             const VerticalDivider(width: 1),
             Expanded(
@@ -192,59 +203,150 @@ class _ConnectDialogState extends ConsumerState<ConnectDialog> {
   }
 }
 
-class _FavoritesList extends StatelessWidget {
-  const _FavoritesList({
+class _SidebarList extends StatelessWidget {
+  const _SidebarList({
     required this.favorites,
-    required this.onPick,
-    required this.onRemove,
+    required this.lanServers,
+    required this.onPickFavorite,
+    required this.onPickLan,
+    required this.onRemoveFavorite,
+    required this.onRescanLan,
   });
+
   final List<ServerFavorite> favorites;
-  final void Function(ServerFavorite) onPick;
-  final void Function(ServerFavorite) onRemove;
+  final List<LanServer> lanServers;
+  final void Function(ServerFavorite) onPickFavorite;
+  final void Function(LanServer) onPickLan;
+  final void Function(ServerFavorite) onRemoveFavorite;
+  final VoidCallback onRescanLan;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 220,
+      width: 240,
       color: AppColors.bg1,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 18, 12, 12),
-            child: Text('Favorites',
-                style: TextStyle(
+          _SectionHeading(
+            label: 'On your network',
+            trailing: IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 14),
+              tooltip: 'Rescan',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              visualDensity: VisualDensity.compact,
+              onPressed: onRescanLan,
+            ),
+          ),
+          if (lanServers.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Text(
+                'No Mumble servers found on the LAN.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            )
+          else
+            for (final s in lanServers)
+              _LanRow(server: s, onTap: () => onPickLan(s)),
+          const SizedBox(height: 8),
+          const _SectionHeading(label: 'Favorites'),
+          if (favorites.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Text(
+                'No favorites yet. Tick "Save as favorite" when connecting.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            )
+          else
+            for (final f in favorites)
+              _FavoriteRow(
+                favorite: f,
+                onTap: () => onPickFavorite(f),
+                onRemove: () => onRemoveFavorite(f),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({required this.label, this.trailing});
+  final String label;
+  final Widget? trailing;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(
                     color: AppColors.textMuted,
                     fontSize: 11,
                     letterSpacing: 1.2,
                     fontWeight: FontWeight.w600)),
           ),
-          Expanded(
-            child: favorites.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        'No favorites yet.\nTick "Save as favorite" when connecting.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            color: AppColors.textMuted, fontSize: 12),
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: favorites.length,
-                    itemBuilder: (_, i) {
-                      final f = favorites[i];
-                      return _FavoriteRow(
-                        favorite: f,
-                        onTap: () => onPick(f),
-                        onRemove: () => onRemove(f),
-                      );
-                    },
-                  ),
-          ),
+          if (trailing != null) trailing!,
         ],
+      ),
+    );
+  }
+}
+
+class _LanRow extends StatefulWidget {
+  const _LanRow({required this.server, required this.onTap});
+  final LanServer server;
+  final VoidCallback onTap;
+  @override
+  State<_LanRow> createState() => _LanRowState();
+}
+
+class _LanRowState extends State<_LanRow> {
+  bool _hover = false;
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          color: _hover ? AppColors.bg2 : Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          child: Row(
+            children: [
+              Icon(Icons.lan_rounded,
+                  size: 13, color: AppColors.textMuted.withValues(alpha: 0.9)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.server.displayName,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: AppColors.text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 1),
+                    Text(
+                      '${widget.server.address}:${widget.server.port}',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: AppColors.textMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
