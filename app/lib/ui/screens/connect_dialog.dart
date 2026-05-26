@@ -24,6 +24,8 @@ class _ConnectDialogState extends ConsumerState<ConnectDialog> {
   @override
   void initState() {
     super.initState();
+    // Pre-fill the username with what was used last time.
+    _username.text = ref.read(settingsProvider).lastUsername;
     for (final c in [_host, _port, _username, _password, _favName]) {
       c.addListener(_onChange);
     }
@@ -192,6 +194,11 @@ class _ConnectDialogState extends ConsumerState<ConnectDialog> {
             favorites: [...s.favorites.where((f) => f.host != host || f.port != port), fav],
           ));
     }
+
+    // Remember the username for next time.
+    ref
+        .read(settingsProvider.notifier)
+        .update((s) => s.copyWith(lastUsername: username));
 
     bridge.connect(
       host: host,

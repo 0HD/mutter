@@ -61,7 +61,7 @@ class UserAvatar extends StatelessWidget {
 }
 
 // Maximum extra space (in px) the ring takes around the avatar.
-const double _kRingMaxSpread = 6;
+const double _kRingMaxSpread = 10;
 
 class _SpeakingRing extends StatefulWidget {
   const _SpeakingRing({required this.size, required this.visible});
@@ -113,8 +113,16 @@ class _SpeakingRingState extends State<_SpeakingRing>
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: AppColors.speaking.withValues(alpha: ringOpacity),
-                    width: 2,
+                    width: 3,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.speaking
+                          .withValues(alpha: ringOpacity * 0.6),
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    ),
+                  ],
                 ),
               ),
             ),

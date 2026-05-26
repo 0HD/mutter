@@ -54,6 +54,7 @@ class AppSettings {
     this.pttKey = 'KeyV',
     this.userVolumes = const {},
     this.favorites = const [],
+    this.lastUsername = '',
   });
 
   // Audio (volume as percent — 100 = unity, 200 = +6 dB, 0 = silent).
@@ -77,6 +78,9 @@ class AppSettings {
   // Saved servers.
   final List<ServerFavorite> favorites;
 
+  // Last username the user typed into the connect dialog.
+  final String lastUsername;
+
   AppSettings copyWith({
     bool? duckOtherApps,
     int? inputGainPercent,
@@ -88,6 +92,7 @@ class AppSettings {
     String? pttKey,
     Map<int, int>? userVolumes,
     List<ServerFavorite>? favorites,
+    String? lastUsername,
   }) =>
       AppSettings(
         duckOtherApps: duckOtherApps ?? this.duckOtherApps,
@@ -100,6 +105,7 @@ class AppSettings {
         pttKey: pttKey ?? this.pttKey,
         userVolumes: userVolumes ?? this.userVolumes,
         favorites: favorites ?? this.favorites,
+        lastUsername: lastUsername ?? this.lastUsername,
       );
 
   Map<String, dynamic> toJson() => {
@@ -114,6 +120,7 @@ class AppSettings {
         'userVolumes':
             userVolumes.map((k, v) => MapEntry(k.toString(), v)),
         'favorites': favorites.map((f) => f.toJson()).toList(),
+        'lastUsername': lastUsername,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -133,6 +140,7 @@ class AppSettings {
         favorites: ((j['favorites'] as List<dynamic>?) ?? const [])
             .map((e) => ServerFavorite.fromJson(e as Map<String, dynamic>))
             .toList(growable: false),
+        lastUsername: (j['lastUsername'] as String?) ?? '',
       );
 }
 
