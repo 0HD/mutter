@@ -156,6 +156,15 @@ extern "C" void audio_log(const char* line) {
     post_json(j);
 }
 
+extern "C" void audio_publish_input_level(float rms) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.4f", rms);
+    std::string j = "{\"type\":\"audio_level\",\"rms\":";
+    j += buf;
+    j += "}";
+    post_json(j);
+}
+
 namespace {
 
 void post_state(const char* state, const std::string& reason = "") {
@@ -393,11 +402,26 @@ void dispatch_pack(mumble::tcp::Pack& pack) {
             if (s.audio && audio.senderSession.has_value()) {
                 s.audio->onIncomingAudio(*audio.senderSession, audio.frameNumber,
                                          audio.opusData, audio.isTerminator);
-                if (audio.senderSession != s.local_session) {
-                    // Light-weight speaking indicator: post a talking event.
+                // Speaking indicator: emit a user_talking event only on
+                // transitions so we don't flood the Dart isolate with one
+                // event per 10ms packet.
+                static std::unordered_map<uint32_t, bool> talking;
+                static std::mutex talking_mu;
+                const uint32_t sess = *audio.senderSession;
+                const bool nowTalking = !audio.isTerminator;
+                bool emit = false;
+                {
+                    std::lock_guard<std::mutex> lk(talking_mu);
+                    auto it = talking.find(sess);
+                    if (it == talking.end() || it->second != nowTalking) {
+                        talking[sess] = nowTalking;
+                        emit = true;
+                    }
+                }
+                if (emit) {
                     std::string j = "{\"type\":\"user_talking\",";
-                    appendJsonU32(j, "session", *audio.senderSession); j += ",";
-                    appendJsonBool(j, "talking", !audio.isTerminator);
+                    appendJsonU32(j, "session", sess); j += ",";
+                    appendJsonBool(j, "talking", nowTalking);
                     j += "}";
                     post_json(j);
                 }

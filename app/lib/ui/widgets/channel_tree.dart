@@ -6,6 +6,7 @@ import '../../state/channel_state.dart';
 import '../../state/connection_state.dart';
 import '../../state/user_state.dart';
 import '../theme/app_theme.dart';
+import 'user_avatar.dart';
 
 class ChannelTree extends ConsumerWidget {
   const ChannelTree({super.key});
@@ -204,57 +205,44 @@ class _UserRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icons = <Widget>[];
-    if (user.selfMute || user.mute) {
-      icons.add(const Icon(Icons.mic_off_rounded,
-          size: 12, color: AppColors.muted));
-    }
     if (user.selfDeaf || user.deaf) {
       icons.add(const Icon(Icons.headset_off_rounded,
-          size: 12, color: AppColors.muted));
+          size: 13, color: AppColors.muted));
     }
     if (user.prioritySpeaker) {
       icons.add(const Icon(Icons.star_rounded,
-          size: 12, color: AppColors.warning));
+          size: 13, color: AppColors.warning));
     }
     if (user.recording) {
       icons.add(const Icon(Icons.fiber_manual_record,
-          size: 12, color: AppColors.muted));
+          size: 13, color: AppColors.muted));
     }
 
     return Padding(
       padding: EdgeInsets.only(
-          left: 12.0 + depth * 14, right: 12, top: 3, bottom: 3),
+          left: 14.0 + depth * 14, right: 12, top: 5, bottom: 5),
       child: Row(
         children: [
-          Container(
-            width: 16,
-            height: 16,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.bg3,
-            ),
-            child: Text(
-              user.name.isEmpty ? '?' : user.name.characters.first.toUpperCase(),
-              style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.text),
-            ),
+          UserAvatar(
+            name: user.name,
+            size: 22,
+            talking: user.talking,
+            muted: user.selfMute || user.mute,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               user.name.isEmpty ? '#${user.session}' : user.name,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
-                color: isSelf ? AppColors.accent : AppColors.textDim,
-                fontWeight: isSelf ? FontWeight.w600 : FontWeight.w400,
+                fontSize: 12.5,
+                color: isSelf ? AppColors.text : AppColors.textDim,
+                fontWeight: isSelf ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
           ),
-          for (final w in icons) Padding(padding: const EdgeInsets.only(left: 2), child: w),
+          for (final w in icons)
+            Padding(padding: const EdgeInsets.only(left: 4), child: w),
         ],
       ),
     );

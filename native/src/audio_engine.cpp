@@ -360,7 +360,23 @@ void AudioEngine::captureLoop() {
         }
 
         // Encode 10ms frames as long as we have enough samples.
+        static int sinceLastLevel = 0;
         while (mono48.size() >= kFrameSamples && _running.load()) {
+            // RMS of this 10ms frame, for the UI level meter. Use raw (pre-
+            // gain) signal so the meter reflects the actual mic, not where
+            // the user has the slider.
+            float sumSq = 0.f;
+            for (uint32_t i = 0; i < kFrameSamples; ++i) {
+                const float v = mono48[i];
+                sumSq += v * v;
+            }
+            const float rms = std::sqrt(sumSq / kFrameSamples);
+            if (++sinceLastLevel >= 5) {
+                // ~50ms cadence (5 × 10ms frames).
+                audio_publish_input_level(std::min(1.f, rms));
+                sinceLastLevel = 0;
+            }
+
             const auto bytes = (*_encoder)(
                 gsl::span<std::byte>(opusOut),
                 gsl::span<const float>(mono48.data(), kFrameSamples));

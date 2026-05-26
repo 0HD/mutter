@@ -27,6 +27,10 @@
 // audio engine uses this to surface WASAPI setup failures.
 extern "C" void audio_log(const char* line);
 
+// Implemented by bridge.cpp; posts an "audio_level" event with the most
+// recent mic input RMS (in [0,1]). Called periodically from the capture loop.
+extern "C" void audio_publish_input_level(float rms);
+
 class AudioEngine {
 public:
     // Outgoing-packet callback. `opusData` is a single Opus-encoded frame for

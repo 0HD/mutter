@@ -13,6 +13,7 @@ class UserInfo {
     this.prioritySpeaker = false,
     this.recording = false,
     this.comment = '',
+    this.talking = false,
   });
 
   final int session;
@@ -26,6 +27,7 @@ class UserInfo {
   final bool prioritySpeaker;
   final bool recording;
   final String comment;
+  final bool talking;
 
   factory UserInfo.fromJson(Map<String, dynamic> j) => UserInfo(
         session: j['session'] as int,
@@ -56,6 +58,22 @@ class UserInfo {
         prioritySpeaker: other.prioritySpeaker,
         recording: other.recording,
         comment: other.comment.isNotEmpty ? other.comment : comment,
+        talking: talking,
+      );
+
+  UserInfo withTalking(bool t) => UserInfo(
+        session: session,
+        name: name,
+        channelId: channelId,
+        mute: mute,
+        deaf: deaf,
+        selfMute: selfMute,
+        selfDeaf: selfDeaf,
+        suppress: suppress,
+        prioritySpeaker: prioritySpeaker,
+        recording: recording,
+        comment: comment,
+        talking: t,
       );
 }
 
@@ -71,6 +89,12 @@ class UserNotifier extends Notifier<Map<int, UserInfo>> {
   void remove(int session) {
     final m = {...state}..remove(session);
     state = m;
+  }
+
+  void setTalking(int session, bool talking) {
+    final existing = state[session];
+    if (existing == null || existing.talking == talking) return;
+    state = {...state, session: existing.withTalking(talking)};
   }
 
   void clear() => state = const {};

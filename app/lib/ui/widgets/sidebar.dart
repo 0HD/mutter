@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../bridge/bridge_service.dart';
+import '../../state/audio_level.dart';
 import '../../state/connection_state.dart';
 import '../../state/user_state.dart';
 import '../theme/app_theme.dart';
 import 'channel_tree.dart';
+import 'user_avatar.dart';
 
 class Sidebar extends ConsumerWidget {
   const Sidebar({super.key});
@@ -93,65 +95,111 @@ class _SelfStrip extends ConsumerWidget {
     final muted = me?.selfMute ?? false;
     final deafened = me?.selfDeaf ?? false;
     final bridge = ref.read(bridgeProvider);
+    final level = ref.watch(audioLevelProvider);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
       color: AppColors.bg1,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: AppColors.bg3,
-            child: Text(
-              (conn.username ?? '?').characters.first.toUpperCase(),
-              style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  conn.username ?? 'not signed in',
-                  style: const TextStyle(
-                      color: AppColors.text,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              UserAvatar(
+                name: conn.username ?? '?',
+                size: 32,
+                talking: !muted && conn.isConnected && level > 0.02,
+                muted: muted,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      conn.username ?? 'not signed in',
+                      style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      conn.isConnected ? 'online' : 'offline',
+                      style: const TextStyle(
+                          color: AppColors.textMuted, fontSize: 11),
+                    ),
+                  ],
                 ),
-                Text(
-                  conn.isConnected ? 'online' : 'offline',
-                  style: const TextStyle(
-                      color: AppColors.textMuted, fontSize: 11),
+              ),
+              IconButton(
+                icon: Icon(
+                  muted ? Icons.mic_off_rounded : Icons.mic_none_rounded,
+                  size: 18,
+                  color: muted ? AppColors.muted : null,
                 ),
-              ],
+                tooltip: muted ? 'Unmute' : 'Mute',
+                onPressed: conn.isConnected
+                    ? () => bridge.setSelfMute(!muted)
+                    : null,
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                icon: Icon(
+                  deafened ? Icons.headset_off_rounded : Icons.headset_rounded,
+                  size: 18,
+                  color: deafened ? AppColors.muted : null,
+                ),
+                tooltip: deafened ? 'Undeafen' : 'Deafen',
+                onPressed: conn.isConnected
+                    ? () => bridge.setSelfDeaf(!deafened)
+                    : null,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _MicLevelBar(
+              level: conn.isConnected && !muted ? level : 0.0,
+              active: conn.isConnected && !muted),
+        ],
+      ),
+    );
+  }
+}
+
+class _MicLevelBar extends StatelessWidget {
+  const _MicLevelBar({required this.level, required this.active});
+  final double level;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    // Convert RMS to a perceptual scale. RMS is roughly [0..1] but real
+    // speech sits around 0.05..0.3, so a sqrt curve helps the bar feel
+    // responsive without going slammed.
+    final eased = level <= 0
+        ? 0.0
+        : (level.clamp(0.0, 1.0) * 4.0).clamp(0.0, 1.0);
+    return SizedBox(
+      height: 5,
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.bg3,
+              borderRadius: BorderRadius.circular(3),
             ),
           ),
-          IconButton(
-            icon: Icon(
-              muted ? Icons.mic_off_rounded : Icons.mic_none_rounded,
-              size: 18,
-              color: muted ? AppColors.muted : null,
+          FractionallySizedBox(
+            widthFactor: eased,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 80),
+              decoration: BoxDecoration(
+                color: active ? AppColors.speaking : AppColors.textMuted,
+                borderRadius: BorderRadius.circular(3),
+              ),
             ),
-            tooltip: muted ? 'Unmute' : 'Mute',
-            onPressed: conn.isConnected
-                ? () => bridge.setSelfMute(!muted)
-                : null,
-          ),
-          IconButton(
-            icon: Icon(
-              deafened ? Icons.headset_off_rounded : Icons.headset_rounded,
-              size: 18,
-              color: deafened ? AppColors.muted : null,
-            ),
-            tooltip: deafened ? 'Undeafen' : 'Deafen',
-            onPressed: conn.isConnected
-                ? () => bridge.setSelfDeaf(!deafened)
-                : null,
           ),
         ],
       ),

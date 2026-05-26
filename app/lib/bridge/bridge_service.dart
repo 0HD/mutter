@@ -6,6 +6,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../settings/app_settings.dart';
+import '../state/audio_level.dart';
 import '../state/channel_state.dart';
 import '../state/chat_state.dart';
 import '../state/connection_state.dart';
@@ -188,7 +189,14 @@ class BridgeService {
             '[${j['source']}] ${j['message']}');
         break;
       case 'user_talking':
-        // Future: speaking-ring around avatars. No-op for now.
+        _ref
+            .read(userProvider.notifier)
+            .setTalking(j['session'] as int, j['talking'] as bool);
+        break;
+      case 'audio_level':
+        _ref
+            .read(audioLevelProvider.notifier)
+            .set((j['rms'] as num).toDouble());
         break;
     }
   }
