@@ -360,13 +360,32 @@ void AudioEngine::captureLoop() {
             capture->GetNextPacketSize(&packetFrames);
         }
 
-        // Apply input gain. When muted, push silence (so we still advance the
-        // frame counter and the server sees a steady stream of nothing).
+        // Apply input gain.
         const float gain = _inputGain.load();
         const bool muted = _muted.load();
-        if (!muted && gain != 1.f) {
+        if (gain != 1.f) {
             for (float& s : mono48) s *= gain;
-        } else if (muted) {
+        }
+        // Cross-fade at TX-state transitions so an abrupt mute or PTT release
+        // doesn't produce a click. Window is 5 ms (240 samples at 48 kHz).
+        const bool nowTransmittingForFade = !muted && _transmitting.load();
+        const size_t fadeSamples = std::min<size_t>(240, mono48.size());
+        if (fadeSamples > 0) {
+            if (!wasTransmitting && nowTransmittingForFade) {
+                for (size_t i = 0; i < fadeSamples; ++i) {
+                    mono48[i] *= float(i) / float(fadeSamples);
+                }
+            } else if (wasTransmitting && !nowTransmittingForFade) {
+                const size_t sz = mono48.size();
+                for (size_t i = 0; i < fadeSamples; ++i) {
+                    mono48[sz - fadeSamples + i] *=
+                        float(fadeSamples - 1 - i) / float(fadeSamples);
+                }
+            }
+        }
+        // Once we're fully silent (no transition this round), zero the buffer
+        // so a hot mic isn't lying around to be encoded.
+        if (muted && !(wasTransmitting && !nowTransmittingForFade)) {
             std::fill(mono48.begin(), mono48.end(), 0.f);
         }
 

@@ -1,9 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+
+/// Convert a volume percentage (0% silent, 100% unity, 200% +6 dB) to a
+/// gain in decibels. Treats 0% as effectively muted (-60 dB).
+double dbFromPercent(num percent) {
+  if (percent <= 0) return -60.0;
+  return 20.0 * (math.log(percent / 100.0) / math.ln10);
+}
 
 enum TxMode { continuous, vad, ptt }
 
@@ -37,89 +45,82 @@ class ServerFavorite {
 class AppSettings {
   const AppSettings({
     this.duckOtherApps = true,
-    this.inputGainDb = 0.0,
-    this.outputGainDb = 0.0,
+    this.inputGainPercent = 100,
+    this.outputGainPercent = 100,
     this.opusBitrateKbps = 32,
     this.notificationSounds = true,
     this.minimizeToTray = false,
-    this.attenuateOthersDb = 0.0,
     this.txMode = TxMode.continuous,
     this.pttKey = 'KeyV',
-    this.userVolumesDb = const {},
+    this.userVolumes = const {},
     this.favorites = const [],
   });
 
-  // Audio
+  // Audio (volume as percent — 100 = unity, 200 = +6 dB, 0 = silent).
   final bool duckOtherApps;
-  final double inputGainDb;
-  final double outputGainDb;
+  final int inputGainPercent;
+  final int outputGainPercent;
   final int opusBitrateKbps;
-  final double attenuateOthersDb;
 
   // Voice
   final TxMode txMode;
-  final String pttKey; // hotkey_manager KeyCode name, e.g. "KeyV", "Space"
+  final String pttKey;
 
   // Behavior
   final bool notificationSounds;
   final bool minimizeToTray;
 
-  // Per-user volume (session ID -> dB). Note: sessions are not stable across
-  // reconnects so this is effectively per-server-per-session.
-  final Map<int, double> userVolumesDb;
+  // Per-user output volume (session ID -> percent). Sessions are not stable
+  // across reconnects so this is effectively per-server-per-session.
+  final Map<int, int> userVolumes;
 
   // Saved servers.
   final List<ServerFavorite> favorites;
 
   AppSettings copyWith({
     bool? duckOtherApps,
-    double? inputGainDb,
-    double? outputGainDb,
+    int? inputGainPercent,
+    int? outputGainPercent,
     int? opusBitrateKbps,
-    double? attenuateOthersDb,
     bool? notificationSounds,
     bool? minimizeToTray,
     TxMode? txMode,
     String? pttKey,
-    Map<int, double>? userVolumesDb,
+    Map<int, int>? userVolumes,
     List<ServerFavorite>? favorites,
   }) =>
       AppSettings(
         duckOtherApps: duckOtherApps ?? this.duckOtherApps,
-        inputGainDb: inputGainDb ?? this.inputGainDb,
-        outputGainDb: outputGainDb ?? this.outputGainDb,
+        inputGainPercent: inputGainPercent ?? this.inputGainPercent,
+        outputGainPercent: outputGainPercent ?? this.outputGainPercent,
         opusBitrateKbps: opusBitrateKbps ?? this.opusBitrateKbps,
-        attenuateOthersDb: attenuateOthersDb ?? this.attenuateOthersDb,
         notificationSounds: notificationSounds ?? this.notificationSounds,
         minimizeToTray: minimizeToTray ?? this.minimizeToTray,
         txMode: txMode ?? this.txMode,
         pttKey: pttKey ?? this.pttKey,
-        userVolumesDb: userVolumesDb ?? this.userVolumesDb,
+        userVolumes: userVolumes ?? this.userVolumes,
         favorites: favorites ?? this.favorites,
       );
 
   Map<String, dynamic> toJson() => {
         'duckOtherApps': duckOtherApps,
-        'inputGainDb': inputGainDb,
-        'outputGainDb': outputGainDb,
+        'inputGainPercent': inputGainPercent,
+        'outputGainPercent': outputGainPercent,
         'opusBitrateKbps': opusBitrateKbps,
-        'attenuateOthersDb': attenuateOthersDb,
         'notificationSounds': notificationSounds,
         'minimizeToTray': minimizeToTray,
         'txMode': txMode.name,
         'pttKey': pttKey,
-        'userVolumesDb':
-            userVolumesDb.map((k, v) => MapEntry(k.toString(), v)),
+        'userVolumes':
+            userVolumes.map((k, v) => MapEntry(k.toString(), v)),
         'favorites': favorites.map((f) => f.toJson()).toList(),
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
         duckOtherApps: (j['duckOtherApps'] as bool?) ?? true,
-        inputGainDb: (j['inputGainDb'] as num?)?.toDouble() ?? 0.0,
-        outputGainDb: (j['outputGainDb'] as num?)?.toDouble() ?? 0.0,
+        inputGainPercent: (j['inputGainPercent'] as int?) ?? 100,
+        outputGainPercent: (j['outputGainPercent'] as int?) ?? 100,
         opusBitrateKbps: (j['opusBitrateKbps'] as int?) ?? 32,
-        attenuateOthersDb:
-            (j['attenuateOthersDb'] as num?)?.toDouble() ?? 0.0,
         notificationSounds: (j['notificationSounds'] as bool?) ?? true,
         minimizeToTray: (j['minimizeToTray'] as bool?) ?? false,
         txMode: TxMode.values.firstWhere(
@@ -127,8 +128,8 @@ class AppSettings {
           orElse: () => TxMode.continuous,
         ),
         pttKey: (j['pttKey'] as String?) ?? 'KeyV',
-        userVolumesDb: ((j['userVolumesDb'] as Map<String, dynamic>?) ?? {})
-            .map((k, v) => MapEntry(int.parse(k), (v as num).toDouble())),
+        userVolumes: ((j['userVolumes'] as Map<String, dynamic>?) ?? {})
+            .map((k, v) => MapEntry(int.parse(k), (v as num).toInt())),
         favorites: ((j['favorites'] as List<dynamic>?) ?? const [])
             .map((e) => ServerFavorite.fromJson(e as Map<String, dynamic>))
             .toList(growable: false),

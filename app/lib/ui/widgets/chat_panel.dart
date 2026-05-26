@@ -60,7 +60,10 @@ class _ChatPanelState extends ConsumerState<ChatPanel> {
                     itemCount: messages.length,
                     itemBuilder: (_, i) => _MessageRow(
                       message: messages[i],
-                      author: users[messages[i].actor]?.name,
+                      // Prefer the snapshotted name (correct after the user
+                      // leaves the server); fall back to live lookup.
+                      author: messages[i].actorName ??
+                          users[messages[i].actor]?.name,
                     ),
                   ),
           ),

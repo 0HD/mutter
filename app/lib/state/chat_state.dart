@@ -5,12 +5,16 @@ class ChatMessage {
     required this.actor,
     required this.text,
     required this.ts,
+    this.actorName,
     this.channelIds = const [],
     this.sessionIds = const [],
     this.system = false,
   });
 
   final int actor;
+  /// Display name snapshotted when the message was added, so it stays correct
+  /// after the user disconnects (and is no longer in the user list).
+  final String? actorName;
   final String text;
   final DateTime ts;
   final List<int> channelIds;
@@ -28,6 +32,16 @@ class ChatMessage {
             .map((e) => e as int)
             .toList(growable: false),
       );
+
+  ChatMessage withActorName(String? name) => ChatMessage(
+        actor: actor,
+        text: text,
+        ts: ts,
+        actorName: name,
+        channelIds: channelIds,
+        sessionIds: sessionIds,
+        system: system,
+      );
 }
 
 class ChatNotifier extends Notifier<List<ChatMessage>> {
@@ -36,7 +50,6 @@ class ChatNotifier extends Notifier<List<ChatMessage>> {
 
   void add(ChatMessage m) {
     final next = [...state, m];
-    // Cap at 500 to avoid unbounded growth.
     if (next.length > 500) next.removeRange(0, next.length - 500);
     state = next;
   }

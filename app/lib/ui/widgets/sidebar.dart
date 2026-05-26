@@ -97,111 +97,133 @@ class _SelfStrip extends ConsumerWidget {
     final bridge = ref.read(bridgeProvider);
     final level = ref.watch(audioLevelProvider);
 
+    final talkingNow = !muted && conn.isConnected && level > 0.02;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
       color: AppColors.bg1,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: [
-          Row(
-            children: [
-              UserAvatar(
-                name: conn.username ?? '?',
-                size: 32,
-                talking: !muted && conn.isConnected && level > 0.02,
-                muted: muted,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      conn.username ?? 'not signed in',
-                      style: const TextStyle(
-                          color: AppColors.text,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      conn.isConnected ? 'online' : 'offline',
-                      style: const TextStyle(
-                          color: AppColors.textMuted, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: Icon(
-                  muted ? Icons.mic_off_rounded : Icons.mic_none_rounded,
-                  size: 18,
-                  color: muted ? AppColors.muted : null,
-                ),
-                tooltip: muted ? 'Unmute' : 'Mute',
-                onPressed: conn.isConnected
-                    ? () => bridge.setSelfMute(!muted)
-                    : null,
-                visualDensity: VisualDensity.compact,
-              ),
-              IconButton(
-                icon: Icon(
-                  deafened ? Icons.headset_off_rounded : Icons.headset_rounded,
-                  size: 18,
-                  color: deafened ? AppColors.muted : null,
-                ),
-                tooltip: deafened ? 'Undeafen' : 'Deafen',
-                onPressed: conn.isConnected
-                    ? () => bridge.setSelfDeaf(!deafened)
-                    : null,
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
+          UserAvatar(
+            name: conn.username ?? '?',
+            size: 32,
+            talking: talkingNow,
           ),
-          const SizedBox(height: 8),
-          _MicLevelBar(
-              level: conn.isConnected && !muted ? level : 0.0,
-              active: conn.isConnected && !muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  conn.username ?? 'not signed in',
+                  style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  conn.isConnected ? 'online' : 'offline',
+                  style: const TextStyle(
+                      color: AppColors.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          _MicIndicator(
+            level: !muted && conn.isConnected ? level : 0.0,
+            muted: muted,
+            connected: conn.isConnected,
+            onTap: conn.isConnected
+                ? () => bridge.setSelfMute(!muted)
+                : null,
+          ),
+          IconButton(
+            icon: Icon(
+              deafened ? Icons.headset_off_rounded : Icons.headset_rounded,
+              size: 18,
+              color: deafened ? AppColors.muted : null,
+            ),
+            tooltip: deafened ? 'Undeafen' : 'Deafen',
+            onPressed: conn.isConnected
+                ? () => bridge.setSelfDeaf(!deafened)
+                : null,
+            visualDensity: VisualDensity.compact,
+          ),
         ],
       ),
     );
   }
 }
 
-class _MicLevelBar extends StatelessWidget {
-  const _MicLevelBar({required this.level, required this.active});
+/// Mic button that doubles as a tiny live-level meter — a small bar inside
+/// the icon's bounding box fills with green as you speak. Replaces the full-
+/// width meter that was distracting at the bottom of the sidebar.
+class _MicIndicator extends StatelessWidget {
+  const _MicIndicator({
+    required this.level,
+    required this.muted,
+    required this.connected,
+    required this.onTap,
+  });
   final double level;
-  final bool active;
+  final bool muted;
+  final bool connected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    // Convert RMS to a perceptual scale. RMS is roughly [0..1] but real
-    // speech sits around 0.05..0.3, so a sqrt curve helps the bar feel
-    // responsive without going slammed.
     final eased = level <= 0
         ? 0.0
         : (level.clamp(0.0, 1.0) * 4.0).clamp(0.0, 1.0);
-    return SizedBox(
-      height: 5,
-      child: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.bg3,
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-          FractionallySizedBox(
-            widthFactor: eased,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 80),
-              decoration: BoxDecoration(
-                color: active ? AppColors.speaking : AppColors.textMuted,
-                borderRadius: BorderRadius.circular(3),
+    return Tooltip(
+      message: muted ? 'Unmute' : 'Mute',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 36,
+          height: 32,
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              Center(
+                child: Icon(
+                  muted ? Icons.mic_off_rounded : Icons.mic_none_rounded,
+                  size: 18,
+                  color: muted ? AppColors.muted : AppColors.textDim,
+                ),
               ),
-            ),
+              // Slim level bar pinned to the bottom of the cell — present but
+              // not the visual focus of the strip.
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 4,
+                height: 2,
+                child: Stack(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.bg3,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                    FractionallySizedBox(
+                      widthFactor: muted || !connected ? 0.0 : eased,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 80),
+                        decoration: BoxDecoration(
+                          color: AppColors.speaking,
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

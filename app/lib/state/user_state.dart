@@ -83,7 +83,15 @@ class UserNotifier extends Notifier<Map<int, UserInfo>> {
 
   void upsert(UserInfo u) {
     final existing = state[u.session];
-    state = {...state, u.session: existing == null ? u : existing.merge(u)};
+    var merged = existing == null ? u : existing.merge(u);
+    // A user who is muted (by self or by an admin) or deafened can't actually
+    // be talking — make sure the speaking indicator doesn't stick on when
+    // they mute mid-utterance.
+    if (merged.talking &&
+        (merged.selfMute || merged.mute || merged.selfDeaf || merged.deaf)) {
+      merged = merged.withTalking(false);
+    }
+    state = {...state, u.session: merged};
   }
 
   void remove(int session) {

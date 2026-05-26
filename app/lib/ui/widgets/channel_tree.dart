@@ -241,17 +241,21 @@ class _UserRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final icons = <Widget>[];
+    if (user.selfMute || user.mute) {
+      icons.add(Icon(Icons.mic_off_rounded,
+          size: 14, color: AppColors.muted.withValues(alpha: 0.85)));
+    }
     if (user.selfDeaf || user.deaf) {
-      icons.add(const Icon(Icons.headset_off_rounded,
-          size: 13, color: AppColors.muted));
+      icons.add(Icon(Icons.headset_off_rounded,
+          size: 14, color: AppColors.muted.withValues(alpha: 0.85)));
     }
     if (user.prioritySpeaker) {
       icons.add(const Icon(Icons.star_rounded,
-          size: 13, color: AppColors.warning));
+          size: 14, color: AppColors.warning));
     }
     if (user.recording) {
       icons.add(const Icon(Icons.fiber_manual_record,
-          size: 13, color: AppColors.muted));
+          size: 14, color: AppColors.muted));
     }
 
     return GestureDetector(
@@ -259,16 +263,11 @@ class _UserRow extends ConsumerWidget {
           context, ref, details.globalPosition),
       child: Padding(
         padding: EdgeInsets.only(
-            left: 14.0 + depth * 14, right: 12, top: 5, bottom: 5),
+            left: 10.0 + depth * 14, right: 12, top: 3, bottom: 3),
         child: Row(
           children: [
-            UserAvatar(
-              name: user.name,
-              size: 22,
-              talking: user.talking,
-              muted: user.selfMute || user.mute,
-            ),
-            const SizedBox(width: 10),
+            UserAvatar(name: user.name, size: 22, talking: user.talking),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 user.name.isEmpty ? '#${user.session}' : user.name,
@@ -281,7 +280,7 @@ class _UserRow extends ConsumerWidget {
               ),
             ),
             for (final w in icons)
-              Padding(padding: const EdgeInsets.only(left: 4), child: w),
+              Padding(padding: const EdgeInsets.only(left: 5), child: w),
           ],
         ),
       ),
@@ -295,7 +294,7 @@ class _UserRow extends ConsumerWidget {
         overlay.size.width - pos.dx, overlay.size.height - pos.dy);
 
     final settings = ref.read(settingsProvider);
-    final currentGain = settings.userVolumesDb[user.session] ?? 0.0;
+    final currentPercent = settings.userVolumes[user.session] ?? 100;
 
     await showMenu<void>(
       context: context,
@@ -306,27 +305,31 @@ class _UserRow extends ConsumerWidget {
         side: const BorderSide(color: AppColors.border),
       ),
       items: [
-        PopupMenuItem<void>(
-          enabled: false,
-          padding: EdgeInsets.zero,
-          child: _UserVolumeMenu(
-            user: user,
-            initialDb: currentGain,
-            onChange: (db) {
-              final settings = ref.read(settingsProvider);
-              final newMap = Map<int, double>.from(settings.userVolumesDb);
-              if (db == 0.0) {
-                newMap.remove(user.session);
-              } else {
-                newMap[user.session] = db;
-              }
-              ref
-                  .read(settingsProvider.notifier)
-                  .update((s) => s.copyWith(userVolumesDb: newMap));
-              ref.read(bridgeProvider).setUserGainDb(user.session, db);
-            },
+        // No volume control on yourself — your own voice doesn't play back.
+        if (!isSelf)
+          PopupMenuItem<void>(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _UserVolumeMenu(
+              user: user,
+              initialPercent: currentPercent,
+              onChange: (percent) {
+                final settings = ref.read(settingsProvider);
+                final newMap = Map<int, int>.from(settings.userVolumes);
+                if (percent == 100) {
+                  newMap.remove(user.session);
+                } else {
+                  newMap[user.session] = percent;
+                }
+                ref
+                    .read(settingsProvider.notifier)
+                    .update((s) => s.copyWith(userVolumes: newMap));
+                ref
+                    .read(bridgeProvider)
+                    .setUserVolumePercent(user.session, percent);
+              },
+            ),
           ),
-        ),
         if (user.comment.isNotEmpty)
           PopupMenuItem<void>(
             enabled: false,
@@ -361,19 +364,19 @@ class _UserRow extends ConsumerWidget {
 class _UserVolumeMenu extends StatefulWidget {
   const _UserVolumeMenu({
     required this.user,
-    required this.initialDb,
+    required this.initialPercent,
     required this.onChange,
   });
   final UserInfo user;
-  final double initialDb;
-  final void Function(double) onChange;
+  final int initialPercent;
+  final void Function(int) onChange;
 
   @override
   State<_UserVolumeMenu> createState() => _UserVolumeMenuState();
 }
 
 class _UserVolumeMenuState extends State<_UserVolumeMenu> {
-  late double _db = widget.initialDb;
+  late int _percent = widget.initialPercent;
 
   @override
   Widget build(BuildContext context) {
@@ -401,7 +404,7 @@ class _UserVolumeMenuState extends State<_UserVolumeMenu> {
                       fontWeight: FontWeight.w600),
                 ),
               ),
-              Text('${_db.toStringAsFixed(1)} dB',
+              Text('$_percent%',
                   style: const TextStyle(
                       color: AppColors.accent,
                       fontSize: 11,
@@ -411,13 +414,13 @@ class _UserVolumeMenuState extends State<_UserVolumeMenu> {
           ),
           const SizedBox(height: 6),
           Slider(
-            value: _db.clamp(-24.0, 24.0),
-            min: -24,
-            max: 24,
-            divisions: 96,
+            value: _percent.clamp(0, 200).toDouble(),
+            min: 0,
+            max: 200,
+            divisions: 40,
             onChanged: (v) {
-              setState(() => _db = v);
-              widget.onChange(v);
+              setState(() => _percent = v.round());
+              widget.onChange(_percent);
             },
           ),
         ],

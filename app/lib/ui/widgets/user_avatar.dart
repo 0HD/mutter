@@ -2,41 +2,37 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// Colored-circle avatar with the user's initial. Color is derived
-/// deterministically from the username so the same user always gets the
-/// same colour across sessions. When `talking` is true, a soft animated
-/// ring pulses around the circle.
+/// Colored circle with the user's initial. Colour is derived deterministically
+/// from the username so the same user always renders the same. When `talking`
+/// is true a soft pulsing ring appears around it. The ring is rendered inside
+/// a fixed-size box so turning it on or off doesn't shift surrounding layout.
 class UserAvatar extends StatelessWidget {
   const UserAvatar({
     super.key,
     required this.name,
     this.size = 28,
     this.talking = false,
-    this.muted = false,
   });
 
   final String name;
   final double size;
   final bool talking;
-  final bool muted;
 
   Color get _bg => _colourForName(name);
 
   @override
   Widget build(BuildContext context) {
     final initial = name.isEmpty ? '?' : name.characters.first.toUpperCase();
+    // Reserve room for the ring so adding/removing it never reflows the row.
+    final reserved = size + _kRingMaxSpread;
     final circle = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: _bg,
         gradient: RadialGradient(
-          colors: [
-            _bg.withValues(alpha: 1.0),
-            Color.lerp(_bg, Colors.black, 0.30)!,
-          ],
+          colors: [_bg, Color.lerp(_bg, Colors.black, 0.30)!],
           radius: 0.9,
         ),
       ),
@@ -50,42 +46,28 @@ class UserAvatar extends StatelessWidget {
         ),
       ),
     );
-    return Stack(
-      alignment: Alignment.center,
-      clipBehavior: Clip.none,
-      children: [
-        if (talking)
-          _SpeakingRing(size: size, color: AppColors.speaking),
-        circle,
-        if (muted)
-          Positioned(
-            right: -2,
-            bottom: -2,
-            child: Container(
-              width: size * 0.42,
-              height: size * 0.42,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.bg1,
-                border: Border.all(color: AppColors.bg1, width: 2),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.mic_off_rounded,
-                size: size * 0.28,
-                color: AppColors.muted,
-              ),
-            ),
-          ),
-      ],
+    return SizedBox(
+      width: reserved,
+      height: reserved,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          _SpeakingRing(size: size, visible: talking),
+          circle,
+        ],
+      ),
     );
   }
 }
 
+// Maximum extra space (in px) the ring takes around the avatar.
+const double _kRingMaxSpread = 6;
+
 class _SpeakingRing extends StatefulWidget {
-  const _SpeakingRing({required this.size, required this.color});
+  const _SpeakingRing({required this.size, required this.visible});
   final double size;
-  final Color color;
+  final bool visible;
+
   @override
   State<_SpeakingRing> createState() => _SpeakingRingState();
 }
@@ -93,8 +75,15 @@ class _SpeakingRing extends StatefulWidget {
 class _SpeakingRingState extends State<_SpeakingRing>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1200))
+      vsync: this, duration: const Duration(milliseconds: 1100))
     ..repeat();
+
+  @override
+  void didUpdateWidget(covariant _SpeakingRing old) {
+    super.didUpdateWidget(old);
+    if (widget.visible && !_c.isAnimating) _c.repeat();
+    if (!widget.visible && _c.isAnimating) _c.stop();
+  }
 
   @override
   void dispose() {
@@ -104,24 +93,34 @@ class _SpeakingRingState extends State<_SpeakingRing>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) {
-        final t = _c.value;
-        final spread = 4.0 + 4.0 * t;
-        final opacity = (1.0 - t).clamp(0.0, 1.0);
-        return Container(
-          width: widget.size + spread,
-          height: widget.size + spread,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: widget.color.withValues(alpha: opacity),
-              width: 2,
+    return AnimatedOpacity(
+      opacity: widget.visible ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 150),
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (_, __) {
+          final t = _c.value;
+          final spread = _kRingMaxSpread * t;
+          final ringOpacity = (1.0 - t).clamp(0.0, 1.0);
+          return SizedBox(
+            width: widget.size + _kRingMaxSpread,
+            height: widget.size + _kRingMaxSpread,
+            child: Center(
+              child: Container(
+                width: widget.size + spread,
+                height: widget.size + spread,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.speaking.withValues(alpha: ringOpacity),
+                    width: 2,
+                  ),
+                ),
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

@@ -98,9 +98,15 @@ ThemeData buildTheme() {
       thumbColor: AppColors.accent,
       overlayColor: Color(0x335B8DEF),
       trackHeight: 3,
+      // Fixed-size thumb and a tight overlay — the default Material 3 slider
+      // grows the thumb dramatically on press, which reads as buggy.
+      thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+      overlayShape: RoundSliderOverlayShape(overlayRadius: 12),
+      trackShape: RoundedRectSliderTrackShape(),
     ),
-    splashFactory: InkSparkle.splashFactory,
+    splashFactory: NoSplash.splashFactory,
     visualDensity: VisualDensity.compact,
+    hoverColor: AppColors.bg3.withValues(alpha: 0.4),
   );
 }
 

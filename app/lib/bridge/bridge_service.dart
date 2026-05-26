@@ -43,13 +43,12 @@ class BridgeService {
 
   void _applySettings(AppSettings s) {
     nb.mbSetAudioDucking(s.duckOtherApps);
-    nb.mbSetInputGainDb(s.inputGainDb);
-    nb.mbSetOutputGainDb(s.outputGainDb);
+    nb.mbSetInputGainDb(dbFromPercent(s.inputGainPercent));
+    nb.mbSetOutputGainDb(dbFromPercent(s.outputGainPercent));
     nb.mbSetOpusBitrate(s.opusBitrateKbps * 1000);
     nb.mbSetTxMode(s.txMode.index);
-    // Per-user volumes — push every one (the bridge ignores 0 dB entries).
-    for (final entry in s.userVolumesDb.entries) {
-      nb.mbSetUserGainDb(entry.key, entry.value);
+    for (final entry in s.userVolumes.entries) {
+      nb.mbSetUserGainDb(entry.key, dbFromPercent(entry.value));
     }
   }
 
@@ -117,8 +116,8 @@ class BridgeService {
 
   void setTxMode(TxMode mode) => nb.mbSetTxMode(mode.index);
   void setPttPressed(bool pressed) => nb.mbSetPttPressed(pressed);
-  void setUserGainDb(int sessionId, double db) =>
-      nb.mbSetUserGainDb(sessionId, db);
+  void setUserVolumePercent(int sessionId, int percent) =>
+      nb.mbSetUserGainDb(sessionId, dbFromPercent(percent));
 
   void sendChannelMessage(int channelId, String text, {bool tree = false}) {
     final p = text.toNativeUtf8();
@@ -130,8 +129,11 @@ class BridgeService {
     // Mumble doesn't echo our own text messages back, so add it locally.
     final me = _ref.read(connectionProvider).sessionId;
     if (me != null) {
+      final myName = _ref.read(userProvider)[me]?.name ??
+          _ref.read(connectionProvider).username;
       _ref.read(chatProvider.notifier).add(ChatMessage(
             actor: me,
+            actorName: myName,
             text: text,
             ts: DateTime.now(),
             channelIds: [channelId],
@@ -148,8 +150,11 @@ class BridgeService {
     }
     final me = _ref.read(connectionProvider).sessionId;
     if (me != null) {
+      final myName = _ref.read(userProvider)[me]?.name ??
+          _ref.read(connectionProvider).username;
       _ref.read(chatProvider.notifier).add(ChatMessage(
             actor: me,
+            actorName: myName,
             text: text,
             ts: DateTime.now(),
             sessionIds: [sessionId],
@@ -186,7 +191,9 @@ class BridgeService {
         _ref.read(userProvider.notifier).remove(j['session'] as int);
         break;
       case 'text_message':
-        _ref.read(chatProvider.notifier).add(ChatMessage.fromJson(j));
+        final msg = ChatMessage.fromJson(j);
+        final author = _ref.read(userProvider)[msg.actor]?.name;
+        _ref.read(chatProvider.notifier).add(msg.withActorName(author));
         break;
       case 'permission_denied':
         _ref.read(chatProvider.notifier).addSystem(
@@ -196,8 +203,11 @@ class BridgeService {
         // could surface server welcome banner; ignored for now
         break;
       case 'diag':
-        _ref.read(chatProvider.notifier).addSystem(
-            '[${j['source']}] ${j['message']}');
+        // Diagnostic events from the native side go to stderr only, never
+        // into the chat panel — they spammed the chat with WASAPI startup
+        // info on every connect.
+        // ignore: avoid_print
+        print('[diag/${j['source']}] ${j['message']}');
         break;
       case 'user_talking':
         _ref
@@ -205,9 +215,15 @@ class BridgeService {
             .setTalking(j['session'] as int, j['talking'] as bool);
         break;
       case 'audio_level':
-        _ref
-            .read(audioLevelProvider.notifier)
-            .set((j['rms'] as num).toDouble());
+        final rms = (j['rms'] as num).toDouble();
+        _ref.read(audioLevelProvider.notifier).set(rms);
+        // Drive the speaking indicator for the local user from the mic level
+        // (the bridge only emits user_talking for remote users; otherwise our
+        // own avatar in the channel list never shows talking).
+        final me = _ref.read(connectionProvider).sessionId;
+        if (me != null) {
+          _ref.read(userProvider.notifier).setTalking(me, rms > 0.02);
+        }
         break;
       case 'ping_stats':
         _ref.read(connectionQualityProvider.notifier).update(j);

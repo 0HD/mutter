@@ -202,12 +202,13 @@ class _SectionPanel extends ConsumerWidget {
                     bridge.setAudioDucking(v);
                   },
                   onInputGainChange: (v) {
-                    notifier.update((s) => s.copyWith(inputGainDb: v));
-                    bridge.setInputGainDb(v);
+                    notifier.update((s) => s.copyWith(inputGainPercent: v));
+                    bridge.setInputGainDb(dbFromPercent(v));
                   },
                   onOutputGainChange: (v) {
-                    notifier.update((s) => s.copyWith(outputGainDb: v));
-                    bridge.setOutputGainDb(v);
+                    notifier
+                        .update((s) => s.copyWith(outputGainPercent: v));
+                    bridge.setOutputGainDb(dbFromPercent(v));
                   },
                   onBitrateChange: (v) {
                     notifier.update((s) => s.copyWith(opusBitrateKbps: v));
@@ -265,8 +266,8 @@ class _AudioSection extends StatelessWidget {
 
   final AppSettings settings;
   final void Function(bool) onDuckChange;
-  final void Function(double) onInputGainChange;
-  final void Function(double) onOutputGainChange;
+  final void Function(int) onInputGainChange;
+  final void Function(int) onOutputGainChange;
   final void Function(int) onBitrateChange;
 
   @override
@@ -287,25 +288,26 @@ class _AudioSection extends StatelessWidget {
         ),
         const _Spacer(),
         _SliderCard(
-          title: 'Input gain',
-          valueLabel: '${settings.inputGainDb.toStringAsFixed(1)} dB',
-          value: settings.inputGainDb,
-          min: -12,
-          max: 12,
-          divisions: 48,
-          onChanged: onInputGainChange,
+          title: 'Input volume',
+          valueLabel: '${settings.inputGainPercent}%',
+          value: settings.inputGainPercent.toDouble(),
+          min: 0,
+          max: 200,
+          divisions: 40,
+          onChanged: (v) => onInputGainChange(v.round()),
           subtitle: 'Boost or attenuate your mic before it hits the encoder. '
-              'Best left at 0 dB unless your mic is unusually quiet or loud.',
+              '100% is unity; leave there unless the mic is unusually quiet '
+              'or loud.',
         ),
         const _Spacer(),
         _SliderCard(
-          title: 'Output gain',
-          valueLabel: '${settings.outputGainDb.toStringAsFixed(1)} dB',
-          value: settings.outputGainDb,
-          min: -12,
-          max: 12,
-          divisions: 48,
-          onChanged: onOutputGainChange,
+          title: 'Output volume',
+          valueLabel: '${settings.outputGainPercent}%',
+          value: settings.outputGainPercent.toDouble(),
+          min: 0,
+          max: 200,
+          divisions: 40,
+          onChanged: (v) => onOutputGainChange(v.round()),
           subtitle: 'Applied to all incoming voices.',
         ),
         const _Spacer(),
