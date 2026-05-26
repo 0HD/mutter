@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../bridge/bridge_service.dart';
+import '../../settings/app_settings.dart';
+import '../../state/channel_expansion.dart';
 import '../../state/channel_state.dart';
 import '../../state/connection_state.dart';
 import '../../state/user_state.dart';
@@ -90,6 +93,8 @@ class _ChannelNode extends ConsumerWidget {
     final subChannels = childrenByParent[channel.id] ?? const [];
     final inHere = usersByChannel[channel.id] ?? const [];
     final isMine = myChannelId == channel.id;
+    final collapsed = ref.watch(channelExpansionProvider).contains(channel.id);
+    final hasChildren = subChannels.isNotEmpty || inHere.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -99,19 +104,28 @@ class _ChannelNode extends ConsumerWidget {
           depth: depth,
           isMine: isMine,
           userCount: inHere.length,
+          collapsed: collapsed,
+          hasChildren: hasChildren,
           onTap: () =>
               ref.read(bridgeProvider).joinChannel(channel.id),
+          onToggleCollapse: () =>
+              ref.read(channelExpansionProvider.notifier).toggle(channel.id),
         ),
-        for (final u in inHere)
-          _UserRow(user: u, depth: depth + 1, isSelf: u.session == ref.watch(connectionProvider).sessionId),
-        for (final c in subChannels)
-          _ChannelNode(
-            channel: c,
-            depth: depth + 1,
-            childrenByParent: childrenByParent,
-            usersByChannel: usersByChannel,
-            myChannelId: myChannelId,
-          ),
+        if (!collapsed) ...[
+          for (final u in inHere)
+            _UserRow(
+                user: u,
+                depth: depth + 1,
+                isSelf: u.session == ref.watch(connectionProvider).sessionId),
+          for (final c in subChannels)
+            _ChannelNode(
+              channel: c,
+              depth: depth + 1,
+              childrenByParent: childrenByParent,
+              usersByChannel: usersByChannel,
+              myChannelId: myChannelId,
+            ),
+        ],
       ],
     );
   }
@@ -123,13 +137,19 @@ class _ChannelRow extends StatefulWidget {
     required this.depth,
     required this.isMine,
     required this.userCount,
+    required this.collapsed,
+    required this.hasChildren,
     required this.onTap,
+    required this.onToggleCollapse,
   });
   final ChannelInfo channel;
   final int depth;
   final bool isMine;
   final int userCount;
+  final bool collapsed;
+  final bool hasChildren;
   final VoidCallback onTap;
+  final VoidCallback onToggleCollapse;
 
   @override
   State<_ChannelRow> createState() => _ChannelRowState();
@@ -149,7 +169,7 @@ class _ChannelRowState extends State<_ChannelRow> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           padding: EdgeInsets.only(
-              left: 12.0 + widget.depth * 14, right: 12, top: 6, bottom: 6),
+              left: 4.0 + widget.depth * 14, right: 12, top: 6, bottom: 6),
           color: widget.isMine
               ? AppColors.accentSoft.withValues(alpha: 0.55)
               : _hover
@@ -157,6 +177,22 @@ class _ChannelRowState extends State<_ChannelRow> {
                   : Colors.transparent,
           child: Row(
             children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: widget.hasChildren
+                    ? GestureDetector(
+                        onTap: widget.onToggleCollapse,
+                        child: AnimatedRotation(
+                          turns: widget.collapsed ? -0.25 : 0,
+                          duration: const Duration(milliseconds: 120),
+                          child: const Icon(Icons.expand_more_rounded,
+                              size: 16, color: AppColors.textMuted),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              const SizedBox(width: 2),
               Icon(
                 widget.channel.temporary
                     ? Icons.timer_outlined
@@ -192,7 +228,7 @@ class _ChannelRowState extends State<_ChannelRow> {
   }
 }
 
-class _UserRow extends StatelessWidget {
+class _UserRow extends ConsumerWidget {
   const _UserRow({
     required this.user,
     required this.depth,
@@ -203,7 +239,7 @@ class _UserRow extends StatelessWidget {
   final bool isSelf;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final icons = <Widget>[];
     if (user.selfDeaf || user.deaf) {
       icons.add(const Icon(Icons.headset_off_rounded,
@@ -218,31 +254,172 @@ class _UserRow extends StatelessWidget {
           size: 13, color: AppColors.muted));
     }
 
-    return Padding(
-      padding: EdgeInsets.only(
-          left: 14.0 + depth * 14, right: 12, top: 5, bottom: 5),
-      child: Row(
-        children: [
-          UserAvatar(
-            name: user.name,
-            size: 22,
-            talking: user.talking,
-            muted: user.selfMute || user.mute,
+    return GestureDetector(
+      onSecondaryTapDown: (details) => _showContextMenu(
+          context, ref, details.globalPosition),
+      child: Padding(
+        padding: EdgeInsets.only(
+            left: 14.0 + depth * 14, right: 12, top: 5, bottom: 5),
+        child: Row(
+          children: [
+            UserAvatar(
+              name: user.name,
+              size: 22,
+              talking: user.talking,
+              muted: user.selfMute || user.mute,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                user.name.isEmpty ? '#${user.session}' : user.name,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: isSelf ? AppColors.text : AppColors.textDim,
+                  fontWeight: isSelf ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ),
+            for (final w in icons)
+              Padding(padding: const EdgeInsets.only(left: 4), child: w),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showContextMenu(
+      BuildContext context, WidgetRef ref, Offset pos) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final rect = RelativeRect.fromLTRB(pos.dx, pos.dy,
+        overlay.size.width - pos.dx, overlay.size.height - pos.dy);
+
+    final settings = ref.read(settingsProvider);
+    final currentGain = settings.userVolumesDb[user.session] ?? 0.0;
+
+    await showMenu<void>(
+      context: context,
+      position: rect,
+      color: AppColors.bg2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      items: [
+        PopupMenuItem<void>(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          child: _UserVolumeMenu(
+            user: user,
+            initialDb: currentGain,
+            onChange: (db) {
+              final settings = ref.read(settingsProvider);
+              final newMap = Map<int, double>.from(settings.userVolumesDb);
+              if (db == 0.0) {
+                newMap.remove(user.session);
+              } else {
+                newMap[user.session] = db;
+              }
+              ref
+                  .read(settingsProvider.notifier)
+                  .update((s) => s.copyWith(userVolumesDb: newMap));
+              ref.read(bridgeProvider).setUserGainDb(user.session, db);
+            },
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              user.name.isEmpty ? '#${user.session}' : user.name,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: isSelf ? AppColors.text : AppColors.textDim,
-                fontWeight: isSelf ? FontWeight.w600 : FontWeight.w500,
+        ),
+        if (user.comment.isNotEmpty)
+          PopupMenuItem<void>(
+            enabled: false,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 260),
+              child: Text(
+                user.comment,
+                style: const TextStyle(
+                    color: AppColors.textDim,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic),
               ),
             ),
           ),
-          for (final w in icons)
-            Padding(padding: const EdgeInsets.only(left: 4), child: w),
+        PopupMenuItem<void>(
+          onTap: () => Clipboard.setData(ClipboardData(text: user.name)),
+          child: const Row(
+            children: [
+              Icon(Icons.content_copy_rounded,
+                  size: 14, color: AppColors.textDim),
+              SizedBox(width: 8),
+              Text('Copy name',
+                  style: TextStyle(color: AppColors.text, fontSize: 13)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UserVolumeMenu extends StatefulWidget {
+  const _UserVolumeMenu({
+    required this.user,
+    required this.initialDb,
+    required this.onChange,
+  });
+  final UserInfo user;
+  final double initialDb;
+  final void Function(double) onChange;
+
+  @override
+  State<_UserVolumeMenu> createState() => _UserVolumeMenuState();
+}
+
+class _UserVolumeMenuState extends State<_UserVolumeMenu> {
+  late double _db = widget.initialDb;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 260,
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              UserAvatar(
+                  name: widget.user.name,
+                  size: 24,
+                  talking: widget.user.talking),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.user.name.isEmpty
+                      ? '#${widget.user.session}'
+                      : widget.user.name,
+                  style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+              Text('${_db.toStringAsFixed(1)} dB',
+                  style: const TextStyle(
+                      color: AppColors.accent,
+                      fontSize: 11,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Slider(
+            value: _db.clamp(-24.0, 24.0),
+            min: -24,
+            max: 24,
+            divisions: 96,
+            onChanged: (v) {
+              setState(() => _db = v);
+              widget.onChange(v);
+            },
+          ),
         ],
       ),
     );

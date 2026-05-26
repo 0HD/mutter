@@ -120,6 +120,8 @@ struct BridgeState {
     std::atomic<float> input_gain_db{0.0f};
     std::atomic<float> output_gain_db{0.0f};
     std::atomic<uint32_t> opus_bitrate{32000};
+    std::atomic<int> tx_mode{0};   // 0 = continuous, 1 = VAD, 2 = PTT (matches mb_tx_mode enum)
+    std::atomic<bool> ptt_pressed{false};
 };
 
 BridgeState& S() {
@@ -136,6 +138,19 @@ void stop_ping_thread();
 void send_message(const mumble::tcp::Message& msg);
 void send_audio_via_tunnel(std::vector<std::byte> opusData,
                            uint64_t frameNumber, bool terminator);
+
+// Compute whether the audio engine should currently be transmitting, based on
+// the TX mode + PTT-pressed state. VAD isn't implemented yet; treat it as
+// continuous for now.
+bool should_transmit() {
+    auto& s = S();
+    switch (s.tx_mode.load()) {
+        case MB_TX_CONTINUOUS: return true;
+        case MB_TX_VAD:        return true;  // TODO: real VAD
+        case MB_TX_PTT:        return s.ptt_pressed.load();
+    }
+    return true;
+}
 
 void post_json(const std::string& s) {
     int64_t port = S().event_port.load();
@@ -428,7 +443,20 @@ void dispatch_pack(mumble::tcp::Pack& pack) {
             }
             break;
         }
-        case Type::Ping:
+        case Type::Ping: {
+            mumble::tcp::Message::Ping m;
+            if (!pack(m)) return;
+            char buf[320];
+            std::snprintf(buf, sizeof(buf),
+                "{\"type\":\"ping_stats\","
+                "\"tcpPingAvg\":%.2f,\"tcpPingVar\":%.2f,"
+                "\"udpPingAvg\":%.2f,\"udpPingVar\":%.2f,"
+                "\"good\":%u,\"late\":%u,\"lost\":%u,\"resync\":%u}",
+                m.tcpPingAvg, m.tcpPingVar, m.udpPingAvg, m.udpPingVar,
+                m.good, m.late, m.lost, m.resync);
+            post_json(buf);
+            break;
+        }
         case Type::CryptSetup:
         case Type::CodecVersion:
             // Not surfaced; handled later or ignored for the no-audio path.
@@ -494,6 +522,7 @@ void start_audio_engine() {
     s.audio->setInputGainDb(s.input_gain_db.load());
     s.audio->setOutputGainDb(s.output_gain_db.load());
     s.audio->setOpusBitrate(s.opus_bitrate.load());
+    s.audio->setTransmitting(should_transmit());
     if (!s.audio->start(send_audio_via_tunnel)) {
         s.audio.reset();
         // Surface the failure but don't sever the connection — text-only is
@@ -789,8 +818,18 @@ void mb_set_self_comment(const char* comment) {
     send_message(m);
 }
 
-void  mb_set_tx_mode(mb_tx_mode)                             {}
-void  mb_set_ptt_pressed(bool)                               {}
+void mb_set_tx_mode(mb_tx_mode mode) {
+    auto& s = S();
+    s.tx_mode.store(static_cast<int>(mode));
+    if (s.audio) s.audio->setTransmitting(should_transmit());
+}
+
+void mb_set_ptt_pressed(bool pressed) {
+    auto& s = S();
+    s.ptt_pressed.store(pressed);
+    if (s.audio) s.audio->setTransmitting(should_transmit());
+}
+
 void  mb_set_vad_threshold(float)                            {}
 void  mb_set_voice_hold_ms(uint32_t)                         {}
 
@@ -811,7 +850,10 @@ void mb_set_output_gain_db(float db) {
     if (s.audio) s.audio->setOutputGainDb(db);
 }
 
-void  mb_set_user_gain_db(uint32_t, float)                   {}
+void mb_set_user_gain_db(uint32_t session_id, float db) {
+    auto& s = S();
+    if (s.audio) s.audio->setUserGainDb(session_id, db);
+}
 void  mb_set_noise_suppression(bool)                         {}
 void  mb_set_attenuate_others_db(float)                      {}
 

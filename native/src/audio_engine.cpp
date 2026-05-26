@@ -211,6 +211,16 @@ void AudioEngine::resetSession(uint32_t session) {
     }
 }
 
+void AudioEngine::setUserGainDb(uint32_t session, float db) {
+    const float linear = linearFromDb(db);
+    std::lock_guard<std::mutex> lk(_userGainsMu);
+    if (db == 0.0f) {
+        _userGains.erase(session);
+    } else {
+        _userGains[session] = linear;
+    }
+}
+
 void AudioEngine::captureLoop() {
     ComInit comInit;
     if (FAILED(comInit.hr)) {
@@ -322,6 +332,7 @@ void AudioEngine::captureLoop() {
     std::vector<float> mono48;
     mono48.reserve(kFrameSamples * 4);
     std::vector<std::byte> opusOut(4000);
+    bool wasTransmitting = true;
 
     while (_running.load()) {
         const DWORD wait = WaitForSingleObject(event, 200);
@@ -361,6 +372,7 @@ void AudioEngine::captureLoop() {
 
         // Encode 10ms frames as long as we have enough samples.
         static int sinceLastLevel = 0;
+        const bool nowTransmitting = !muted && _transmitting.load();
         while (mono48.size() >= kFrameSamples && _running.load()) {
             // RMS of this 10ms frame, for the UI level meter. Use raw (pre-
             // gain) signal so the meter reflects the actual mic, not where
@@ -385,10 +397,18 @@ void AudioEngine::captureLoop() {
 
             std::vector<std::byte> payload(bytes.begin(), bytes.end());
             const uint64_t fn = _txFrameCounter.fetch_add(1);
-            if (_outgoing && !muted) {
+            if (!_outgoing) continue;
+
+            if (nowTransmitting) {
                 _outgoing(std::move(payload), fn, false);
+            } else if (wasTransmitting) {
+                // Just transitioned to silent. Send one final packet flagged
+                // as terminator so other clients see us stop talking.
+                _outgoing(std::move(payload), fn, true);
             }
+            // else: stay silent — don't send anything.
         }
+        wasTransmitting = nowTransmitting;
     }
 
     cleanup();
@@ -522,15 +542,32 @@ void AudioEngine::renderLoop() {
             sessions.reserve(_sessions.size());
             for (auto& kv : _sessions) sessions.push_back(kv.second.get());
         }
+        // Snapshot per-session gains under one short lock so we don't hold
+        // the gains mutex during the audio render loop.
+        std::unordered_map<uint32_t, float> userGainsCopy;
+        {
+            std::lock_guard<std::mutex> lk(_userGainsMu);
+            userGainsCopy = _userGains;
+        }
+        // Map session -> PerSession* and remember the session-id for gain lookup.
+        std::vector<std::pair<uint32_t, PerSession*>> sessionList;
+        {
+            std::lock_guard<std::mutex> lk(_sessionsMu);
+            sessionList.reserve(_sessions.size());
+            for (auto& kv : _sessions) sessionList.emplace_back(kv.first, kv.second.get());
+        }
+
         while (produced < neededAt48k) {
             bool any = false;
             const size_t take = std::min<size_t>(kFrameSamples, neededAt48k - produced);
-            for (PerSession* s : sessions) {
+            for (auto& [sid, s] : sessionList) {
                 std::lock_guard<std::mutex> lk(s->mu);
                 if (s->queue.empty()) continue;
                 const auto& frame = s->queue.front();
+                auto gainIt = userGainsCopy.find(sid);
+                const float g = (gainIt == userGainsCopy.end()) ? 1.0f : gainIt->second;
                 for (size_t i = 0; i < take; ++i) {
-                    mix[produced + i] += frame[i];
+                    mix[produced + i] += frame[i] * g;
                 }
                 if (frame.size() <= take) {
                     s->queue.pop_front();

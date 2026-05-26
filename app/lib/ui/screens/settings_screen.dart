@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../bridge/bridge_service.dart';
+import '../../bridge/hotkey_service.dart';
 import '../../settings/app_settings.dart';
 import '../theme/app_theme.dart';
 
-enum _Section { audio, behavior, about }
+enum _Section { audio, voice, behavior, about }
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -88,6 +89,11 @@ class _SectionNav extends StatelessWidget {
               icon: Icons.graphic_eq_rounded,
               isSelected: selected == _Section.audio,
               onTap: () => onSelect(_Section.audio)),
+          _NavItem(
+              label: 'Voice',
+              icon: Icons.mic_rounded,
+              isSelected: selected == _Section.voice,
+              onTap: () => onSelect(_Section.voice)),
           _NavItem(
               label: 'Behavior',
               icon: Icons.tune_rounded,
@@ -208,6 +214,15 @@ class _SectionPanel extends ConsumerWidget {
                     bridge.setOpusBitrate(v * 1000);
                   },
                 ),
+              _Section.voice => _VoiceSection(
+                  settings: settings,
+                  onTxModeChange: (m) {
+                    notifier.update((s) => s.copyWith(txMode: m));
+                  },
+                  onPttKeyChange: (k) {
+                    notifier.update((s) => s.copyWith(pttKey: k));
+                  },
+                ),
               _Section.behavior => _BehaviorSection(
                   settings: settings,
                   onNotificationSoundsChange: (v) => notifier
@@ -307,6 +322,175 @@ class _AudioSection extends StatelessWidget {
               'bandwidth; lower is for very slow connections.',
         ),
       ],
+    );
+  }
+}
+
+class _VoiceSection extends StatelessWidget {
+  const _VoiceSection({
+    required this.settings,
+    required this.onTxModeChange,
+    required this.onPttKeyChange,
+  });
+  final AppSettings settings;
+  final void Function(TxMode) onTxModeChange;
+  final void Function(String) onPttKeyChange;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionHeader('Voice'),
+        _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Transmission',
+                  style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              const Text(
+                'How your mic is sent to the server. Voice activity '
+                'detection is not implemented yet.',
+                style: TextStyle(
+                    color: AppColors.textDim, fontSize: 12.5, height: 1.5),
+              ),
+              const SizedBox(height: 10),
+              _TxModeOption(
+                label: 'Continuous',
+                description: 'Always transmit while not muted.',
+                selected: settings.txMode == TxMode.continuous,
+                onTap: () => onTxModeChange(TxMode.continuous),
+              ),
+              _TxModeOption(
+                label: 'Push to talk',
+                description: 'Transmit only while holding the PTT key.',
+                selected: settings.txMode == TxMode.ptt,
+                onTap: () => onTxModeChange(TxMode.ptt),
+              ),
+              _TxModeOption(
+                label: 'Voice activity (coming soon)',
+                description:
+                    'Auto-detect speech from the mic. Not implemented yet.',
+                selected: settings.txMode == TxMode.vad,
+                onTap: null,
+              ),
+            ],
+          ),
+        ),
+        if (settings.txMode == TxMode.ptt) ...[
+          const _Spacer(),
+          _Card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('PTT key',
+                          style: TextStyle(
+                              color: AppColors.text,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                    DropdownButton<String>(
+                      value: settings.pttKey,
+                      dropdownColor: AppColors.bg2,
+                      underline: const SizedBox.shrink(),
+                      style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                      items: [
+                        for (final k in pttKeyChoices)
+                          DropdownMenuItem(value: k, child: Text(_pretty(k))),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) onPttKeyChange(v);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Registered system-wide, so it works even when other '
+                  'apps (games, browsers) have focus.',
+                  style: TextStyle(
+                      color: AppColors.textDim, fontSize: 12.5, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String _pretty(String code) {
+    if (code.startsWith('Key')) return code.substring(3);
+    return code;
+  }
+}
+
+class _TxModeOption extends StatelessWidget {
+  const _TxModeOption({
+    required this.label,
+    required this.description,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final String description;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              size: 18,
+              color: !enabled
+                  ? AppColors.textMuted
+                  : selected
+                      ? AppColors.accent
+                      : AppColors.textDim,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          color: enabled ? AppColors.text : AppColors.textMuted,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(description,
+                      style: const TextStyle(
+                          color: AppColors.textDim,
+                          fontSize: 12,
+                          height: 1.4)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

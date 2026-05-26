@@ -9,6 +9,7 @@ import '../settings/app_settings.dart';
 import '../state/audio_level.dart';
 import '../state/channel_state.dart';
 import '../state/chat_state.dart';
+import '../state/connection_quality.dart';
 import '../state/connection_state.dart';
 import '../state/user_state.dart';
 import 'bindings.dart' as nb;
@@ -45,6 +46,11 @@ class BridgeService {
     nb.mbSetInputGainDb(s.inputGainDb);
     nb.mbSetOutputGainDb(s.outputGainDb);
     nb.mbSetOpusBitrate(s.opusBitrateKbps * 1000);
+    nb.mbSetTxMode(s.txMode.index);
+    // Per-user volumes — push every one (the bridge ignores 0 dB entries).
+    for (final entry in s.userVolumesDb.entries) {
+      nb.mbSetUserGainDb(entry.key, entry.value);
+    }
   }
 
   void dispose() {
@@ -108,6 +114,11 @@ class BridgeService {
   void setInputGainDb(double db) => nb.mbSetInputGainDb(db);
   void setOutputGainDb(double db) => nb.mbSetOutputGainDb(db);
   void setOpusBitrate(int bps) => nb.mbSetOpusBitrate(bps);
+
+  void setTxMode(TxMode mode) => nb.mbSetTxMode(mode.index);
+  void setPttPressed(bool pressed) => nb.mbSetPttPressed(pressed);
+  void setUserGainDb(int sessionId, double db) =>
+      nb.mbSetUserGainDb(sessionId, db);
 
   void sendChannelMessage(int channelId, String text, {bool tree = false}) {
     final p = text.toNativeUtf8();
@@ -198,6 +209,9 @@ class BridgeService {
             .read(audioLevelProvider.notifier)
             .set((j['rms'] as num).toDouble());
         break;
+      case 'ping_stats':
+        _ref.read(connectionQualityProvider.notifier).update(j);
+        break;
     }
   }
 
@@ -220,6 +234,7 @@ class BridgeService {
         _ref.read(channelProvider.notifier).clear();
         _ref.read(userProvider.notifier).clear();
         _ref.read(chatProvider.notifier).clear();
+        _ref.read(connectionQualityProvider.notifier).reset();
         break;
       case 'error':
         notifier.setPhase(ConnectionPhase.error, error: reason);

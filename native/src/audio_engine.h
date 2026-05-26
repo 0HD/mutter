@@ -54,6 +54,15 @@ public:
     void setDeafened(bool deaf)   { _deafened.store(deaf); }
     void setInputGainDb(float db) { _inputGain.store(linearFromDb(db)); }
     void setOutputGainDb(float db){ _outputGain.store(linearFromDb(db)); }
+
+    // Whether the capture loop should actually transmit audio. The TX mode
+    // (continuous / PTT / VAD) lives in the bridge; the bridge flips this
+    // accordingly. Defaults to true (matches the existing continuous mode).
+    void setTransmitting(bool t)  { _transmitting.store(t); }
+
+    // Per-session output gain (linear multiplier, kept in a map). Used by the
+    // mixer to attenuate or amplify individual users.
+    void setUserGainDb(uint32_t session, float db);
     void setOpusBitrate(uint32_t bps) {
         _opusBitrate = bps;
         if (_encoder) _encoder->setBitrate(bps);
@@ -88,10 +97,14 @@ private:
     std::atomic<bool> _running{false};
     std::atomic<bool> _muted{false};
     std::atomic<bool> _deafened{false};
+    std::atomic<bool> _transmitting{true};
     std::atomic<float> _inputGain{1.0f};
     std::atomic<float> _outputGain{1.0f};
     bool _duckOthers{true};
     uint32_t _opusBitrate{32000};
+
+    std::mutex _userGainsMu;
+    std::unordered_map<uint32_t, float> _userGains;
 
     std::thread _captureThread;
     std::thread _renderThread;

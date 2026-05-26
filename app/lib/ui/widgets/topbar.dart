@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/connection_quality.dart';
 import '../../state/connection_state.dart';
 import '../screens/settings_screen.dart';
 import '../theme/app_theme.dart';
@@ -62,6 +63,8 @@ class TopBar extends ConsumerWidget {
                   color: AppColors.textDim,
                   letterSpacing: 0.2)),
           const Spacer(),
+          if (conn.isConnected) const _PingBadge(),
+          if (conn.isConnected) const SizedBox(width: 6),
           _IconBtn(
               icon: Icons.settings_rounded,
               tooltip: 'Settings',
@@ -85,6 +88,67 @@ class TopBar extends ConsumerWidget {
                     ),
                   )),
         ],
+      ),
+    );
+  }
+}
+
+class _PingBadge extends ConsumerWidget {
+  const _PingBadge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final q = ref.watch(connectionQualityProvider);
+    if (!q.hasData) {
+      return const SizedBox(
+        width: 56,
+        child: Text('…',
+            textAlign: TextAlign.right,
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+      );
+    }
+    final ping = q.tcpPingMs.round();
+    final loss = (q.lossRatio * 100).round();
+    final color = ping < 60
+        ? AppColors.speaking
+        : ping < 150
+            ? AppColors.warning
+            : AppColors.muted;
+    return Tooltip(
+      message: 'TCP ping ${q.tcpPingMs.toStringAsFixed(1)} ms\n'
+          'packets — good ${q.good}, late ${q.late}, lost ${q.lost}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.bg2,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text('${ping}ms',
+                style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 11.5,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                    fontWeight: FontWeight.w600)),
+            if (loss > 0) ...[
+              const SizedBox(width: 6),
+              Text('· $loss% loss',
+                  style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500)),
+            ],
+          ],
+        ),
       ),
     );
   }
