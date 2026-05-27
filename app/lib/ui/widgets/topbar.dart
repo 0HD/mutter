@@ -98,8 +98,8 @@ class _PingBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final q = ref.watch(connectionQualityProvider);
-    // While we wait for the first server Ping (every ~5–15 s) just don't
-    // show anything — better than a confusing "—" placeholder.
+    // While we wait for the first server Ping (every ~5-15 s) just don't
+    // show anything; better than a confusing "-" placeholder.
     if (!q.hasData) return const SizedBox.shrink();
     final ping = q.tcpPingMs.round();
     final loss = (q.lossRatio * 100).round();
@@ -110,7 +110,7 @@ class _PingBadge extends ConsumerWidget {
             : AppColors.muted;
     return Tooltip(
       message: 'Ping ${q.tcpPingMs.toStringAsFixed(1)} ms\n'
-          'packets — good ${q.good}, late ${q.late}, lost ${q.lost}',
+          'packets: good ${q.good}, late ${q.late}, lost ${q.lost}',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(

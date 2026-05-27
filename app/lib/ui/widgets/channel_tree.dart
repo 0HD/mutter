@@ -305,7 +305,7 @@ class _UserRow extends ConsumerWidget {
         side: const BorderSide(color: AppColors.border),
       ),
       items: [
-        // No volume control on yourself — your own voice doesn't play back.
+        // No volume control on yourself; your own voice doesn't play back.
         if (!isSelf)
           PopupMenuItem<void>(
             enabled: false,

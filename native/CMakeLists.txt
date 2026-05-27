@@ -1,4 +1,4 @@
-# mumble_bridge.dll — C ABI bridge between Flutter (Dart FFI) and libmumble.
+# mumble_bridge.dll: C ABI bridge between Flutter (Dart FFI) and libmumble.
 
 cmake_minimum_required(VERSION 3.16)
 project(mumble_bridge VERSION 0.0.1 LANGUAGES C CXX)
@@ -48,7 +48,7 @@ set(LIBMUMBLE_RUNTIME_DLLS
 
 # ms-gsl (libmumble headers use gsl::span in their public API).
 find_package(Microsoft.GSL CONFIG REQUIRED)
-# OpenSSL — we use it directly to generate the self-signed client cert.
+# OpenSSL: we use it directly to generate the self-signed client cert.
 find_package(OpenSSL REQUIRED)
 
 # RNNoise for noise suppression (vcpkg ships it).

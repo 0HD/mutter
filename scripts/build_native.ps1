@@ -2,10 +2,10 @@
 # Flutter app's runner executable so `flutter run` can load it.
 #
 # Prereqs:
-#   - libmumble-master has already been built (see scripts/build_libmumble.ps1).
+#   - libmumble has already been built (see scripts/build_libmumble.ps1).
 #   - Visual Studio 2022 Community with the C++ workload is installed.
 
-# Don't use 'Stop' — CMake writes warnings to stderr which PowerShell would
+# Don't use 'Stop'; CMake writes warnings to stderr which PowerShell would
 # wrongly treat as errors. We check $LASTEXITCODE explicitly instead.
 $ErrorActionPreference = 'Continue'
 

@@ -1,4 +1,4 @@
-// bridge.cpp — C-ABI implementation wrapping libmumble.
+// bridge.cpp: C-ABI implementation wrapping libmumble.
 //
 // This is the Phase 3a connect path: TCP + TLS handshake, Version +
 // Authenticate, and event dispatch for incoming ChannelState / UserState /
@@ -125,7 +125,7 @@ struct BridgeState {
     std::atomic<int> tx_mode{0};   // 0 = continuous, 1 = VAD, 2 = PTT (matches mb_tx_mode enum)
     std::atomic<bool> ptt_pressed{false};
 
-    // Per-session "is currently talking" state — used to deduplicate the
+    // Per-session "is currently talking" state, used to deduplicate the
     // user_talking events emitted on UDP audio packet arrival.
     std::mutex talking_mu;
     std::unordered_map<uint32_t, bool> talking;
@@ -274,7 +274,7 @@ CertPair generate_cert(const std::string& common_name) {
 }
 
 // Dispatch one incoming TCP pack: deserialize into the typed message and
-// post a JSON event for ones the UI cares about. Best-effort — unknown or
+// post a JSON event for ones the UI cares about. Best-effort: unknown or
 // unhandled types are silently dropped so we don't spam the UI.
 void dispatch_pack(mumble::tcp::Pack& pack) {
     using Type = mumble::tcp::Message::Type;
@@ -324,7 +324,7 @@ void dispatch_pack(mumble::tcp::Pack& pack) {
         case Type::UserState: {
             mumble::tcp::Message::UserState m;
             if (!pack(m)) return;
-            // Emit fields only when the protobuf actually carried them — a
+            // Emit fields only when the protobuf actually carried them. A
             // partial server update (e.g. just "recording=true") would
             // otherwise be read by the Dart side as also clearing mute/deaf.
             std::string j = "{\"type\":\"user_state\"";
@@ -536,7 +536,7 @@ void start_ping_thread() {
     s.ping_thread = std::thread([]() {
         auto& s = S();
         while (!s.ping_stop.load()) {
-            // Wait up to 5 seconds, but wake immediately if stop is signalled —
+            // Wait up to 5 seconds, but wake immediately if stop is signalled.
             // sleep_for would otherwise keep disconnect blocked for the full
             // interval. (5s matches the Mumble protocol recommendation so
             // the server's TCP-ping average is accurate.)
@@ -571,7 +571,7 @@ void start_audio_engine() {
     s.audio->setTransmitting(should_transmit());
     if (!s.audio->start(send_audio_via_tunnel)) {
         s.audio.reset();
-        // Surface the failure but don't sever the connection — text-only is
+        // Surface the failure but don't sever the connection; text-only is
         // still useful.
         std::string j = "{\"type\":\"permission_denied\",";
         appendJsonString(j, "reason", "Could not start audio engine "
@@ -761,7 +761,7 @@ int mb_connect(const mb_connect_params* params) {
     {
         std::lock_guard<std::mutex> lk(s.mu);
         if (s.connection || s.peer) {
-            // Already connected/connecting — disconnect first.
+            // Already connected/connecting; disconnect first.
             teardown_locked();
         }
         s.username = params->username;
@@ -791,7 +791,7 @@ void mb_disconnect(void) {
     }
     if (s.setup_thread.joinable()) s.setup_thread.join();
     if (s.ping_thread.joinable())  s.ping_thread.join();
-    // Explicitly announce — libmumble's `closed` callback may or may not fire
+    // Explicitly announce; libmumble's `closed` callback may or may not fire
     // when we initiate the teardown ourselves.
     post_state("disconnected");
 }
@@ -880,7 +880,7 @@ namespace {
 // Low-level keyboard hook for PTT. Windows' RegisterHotKey only delivers
 // presses, not releases, so it can't drive a hold-to-talk button. A WH_KEYBOARD_LL
 // hook sees both edges. Caveat: the thread that installs the hook must pump
-// messages — we install it from the Dart main thread (via FFI from
+// messages, so we install it from the Dart main thread (via FFI from
 // mb_install_ptt_hook) which has Flutter's message loop, so callbacks fire.
 HHOOK g_ptt_hook = nullptr;
 std::atomic<int> g_ptt_vk{0};

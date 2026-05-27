@@ -68,7 +68,7 @@ class LanDiscoveryNotifier extends Notifier<List<LanServer>> {
         }
       }
     } catch (_) {
-      // Multicast not available, blocked by firewall, etc. — silent fail.
+      // Multicast not available, blocked by firewall, etc. Silent fail.
     } finally {
       client.stop();
       _running = false;

@@ -43,7 +43,7 @@ class UserInfo {
         comment: (j['comment'] as String?) ?? '',
       );
 
-  /// libmumble sends a *delta* in UserState messages — name is empty after the
+  /// libmumble sends a *delta* in UserState messages; name is empty after the
   /// initial join, channelId is unset, etc. Merge so missing fields preserve
   /// the previously-known value.
   UserInfo merge(UserInfo other) => UserInfo(
@@ -85,8 +85,8 @@ class UserNotifier extends Notifier<Map<int, UserInfo>> {
     final existing = state[u.session];
     var merged = existing == null ? u : existing.merge(u);
     // A user who is muted (by self or by an admin) or deafened can't actually
-    // be talking — make sure the speaking indicator doesn't stick on when
-    // they mute mid-utterance.
+    // be talking, so clear the speaking indicator when they mute
+    // mid-utterance.
     if (merged.talking &&
         (merged.selfMute || merged.mute || merged.selfDeaf || merged.deaf)) {
       merged = merged.withTalking(false);

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Connection quality stats — sent by the server inside Ping responses.
+/// Connection quality stats, sent by the server inside Ping responses.
 /// All ping values are milliseconds. Packet counts are cumulative since the
 /// connection opened.
 class ConnectionQuality {

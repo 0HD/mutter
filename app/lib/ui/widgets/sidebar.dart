@@ -155,7 +155,7 @@ class _SelfStrip extends ConsumerWidget {
   }
 }
 
-/// Mic button that doubles as a tiny live-level meter — a small bar inside
+/// Mic button that doubles as a tiny live-level meter: a small bar inside
 /// the icon's bounding box fills with green as you speak. Replaces the full-
 /// width meter that was distracting at the bottom of the sidebar.
 class _MicIndicator extends StatelessWidget {
@@ -193,7 +193,7 @@ class _MicIndicator extends StatelessWidget {
                   color: muted ? AppColors.muted : AppColors.textDim,
                 ),
               ),
-              // Slim level bar pinned to the bottom of the cell — present but
+              // Slim level bar pinned to the bottom of the cell; present but
               // not the visual focus of the strip.
               Positioned(
                 left: 8,

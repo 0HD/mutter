@@ -38,10 +38,11 @@ cd app
 flutter run -d windows
 ```
 
-`build_libmumble.ps1` applies three in-place patches to libmumble (see
+`build_libmumble.ps1` applies four in-place patches to libmumble (see
 `scripts/apply_libmumble_patches.ps1`): a missing `<string>` include, a
-FetchContent issue with shallow clones, and a UserState serializer bug that
-makes Mumble servers reject every self-mute.
+FetchContent issue with shallow clones, a UserState serializer bug that
+makes Mumble servers reject every self-mute, and a UserState deserialize
+bug that loses the protobuf `has_X()` info on boolean fields.
 
 ## How it works
 

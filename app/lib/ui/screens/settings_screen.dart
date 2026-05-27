@@ -280,7 +280,7 @@ class _AudioSection extends StatelessWidget {
           title: 'Duck other apps while talking',
           subtitle:
               'When on, Windows lowers the volume of other apps (Spotify, '
-              'games, browsers) while you have the mic open — same behavior '
+              'games, browsers) while you have the mic open. Same behavior '
               'as the Mumble and Discord clients. Turn off if you find it '
               'annoying.',
           value: settings.duckOtherApps,
@@ -401,7 +401,7 @@ class _VoiceSection extends StatelessWidget {
                     DropdownButton<String>(
                       // Fall back to the first choice if the saved value
                       // isn't in our whitelist (older settings file, manual
-                      // edit, etc.) — DropdownButton asserts the value
+                      // edit, etc.). DropdownButton asserts the value
                       // matches one of its items.
                       value: pttKeyChoices.contains(settings.pttKey)
                           ? settings.pttKey

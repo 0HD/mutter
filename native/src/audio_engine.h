@@ -3,8 +3,8 @@
 // First-cut audio pipeline for mutter. WASAPI shared-mode capture +
 // playback, Opus encode/decode via libmumble, simple per-session jitter
 // buffers and mixer. Transport is via UDPTunnel (UDP audio payload wrapped
-// in a TCP control frame) — works without negotiating UDP crypto and is what
-// the official Mumble client falls back to when UDP is blocked.
+// in a TCP control frame), which works without negotiating UDP crypto and
+// is what the official Mumble client falls back to when UDP is blocked.
 
 #ifndef NEWMUMBLE_AUDIO_ENGINE_H
 #define NEWMUMBLE_AUDIO_ENGINE_H
@@ -46,7 +46,7 @@ public:
 
     // Whether to use the COMMUNICATIONS endpoint role for the WASAPI streams
     // (which causes Windows to duck other apps' audio while we're open). Must
-    // be set BEFORE start() — runtime changes require a stop()/start() cycle.
+    // be set BEFORE start(); runtime changes require a stop()/start() cycle.
     void setDuckOthers(bool duck) { _duckOthers = duck; }
     bool duckOthers() const { return _duckOthers; }
 

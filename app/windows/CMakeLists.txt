@@ -92,7 +92,7 @@ endif()
 
 # Copy the native assets provided by the build.dart from all packages, if any
 # package produced them (skip the install if the source directory wasn't even
-# created — file(INSTALL DIRECTORY) errors on a non-existent source).
+# created; file(INSTALL DIRECTORY) errors on a non-existent source).
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(CODE "
   if(EXISTS \"${NATIVE_ASSETS_DIR}\")

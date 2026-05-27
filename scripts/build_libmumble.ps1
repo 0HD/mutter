@@ -8,11 +8,10 @@ if (-not (Test-Path (Join-Path $libmumble 'CMakeLists.txt'))) {
     throw "libmumble submodule not initialized. Run: git submodule update --init --recursive"
 }
 
-# Apply our overlay patches (Key.hpp <string> include, quickpool GIT_SHALLOW
-# removal, UserState serializer fix). See patches/libmumble/ and
-# apply_libmumble_patches.ps1 for what each one does.
+# Apply our overlay patches to libmumble. See apply_libmumble_patches.ps1 for
+# what each one does.
 # $LASTEXITCODE isn't set by pure PowerShell scripts so we can't check it
-# here — apply_libmumble_patches.ps1 throws on real errors itself.
+# here; apply_libmumble_patches.ps1 throws on real errors itself.
 & "$PSScriptRoot\apply_libmumble_patches.ps1"
 
 $vsRoot = & 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe' `

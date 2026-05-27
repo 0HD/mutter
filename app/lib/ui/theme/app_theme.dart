@@ -98,7 +98,7 @@ ThemeData buildTheme() {
       thumbColor: AppColors.accent,
       overlayColor: Color(0x335B8DEF),
       trackHeight: 3,
-      // Fixed-size thumb and a tight overlay — the default Material 3 slider
+      // Fixed-size thumb and a tight overlay; the default Material 3 slider
       // grows the thumb dramatically on press, which reads as buggy.
       thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
       overlayShape: RoundSliderOverlayShape(overlayRadius: 12),
@@ -111,7 +111,7 @@ ThemeData buildTheme() {
 }
 
 class WindowChromeStyle {
-  // Slim system chrome — apply once at startup if we want to draw our own
+  // Slim system chrome. Apply once at startup if we want to draw our own
   // title bar in the future via the window_manager package.
   static SystemUiOverlayStyle dark() => SystemUiOverlayStyle.dark.copyWith(
         statusBarColor: AppColors.bg0,

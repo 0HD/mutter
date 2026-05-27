@@ -57,7 +57,7 @@ class AppSettings {
     this.lastUsername = '',
   });
 
-  // Audio (volume as percent — 100 = unity, 200 = +6 dB, 0 = silent).
+  // Audio (volume as percent: 100 = unity, 200 = +6 dB, 0 = silent).
   final bool duckOtherApps;
   final int inputGainPercent;
   final int outputGainPercent;
@@ -172,7 +172,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
     try {
       await _file!.writeAsString(json.encode(state.toJson()));
     } catch (_) {
-      // Disk errors are silent — we'll retry on next change.
+      // Disk errors are silent. We'll retry on next change.
     }
   }
 

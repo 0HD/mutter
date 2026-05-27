@@ -204,7 +204,7 @@ class BridgeService {
         break;
       case 'diag':
         // Diagnostic events from the native side go to stderr only, never
-        // into the chat panel — they spammed the chat with WASAPI startup
+        // into the chat panel; they spammed the chat with WASAPI startup
         // info on every connect.
         // ignore: avoid_print
         print('[diag/${j['source']}] ${j['message']}');

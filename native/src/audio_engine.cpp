@@ -1,4 +1,4 @@
-// audio_engine.cpp — WASAPI capture/render + Opus codec + per-session mixer.
+// audio_engine.cpp: WASAPI capture/render + Opus codec + per-session mixer.
 
 #include "audio_engine.h"
 
@@ -22,7 +22,7 @@ constexpr REFERENCE_TIME kRefTimesPerSec  = 10000000;
 constexpr REFERENCE_TIME kRefTimesPerMs   = 10000;
 
 // Hold the requested format. We force 48 kHz mono float to keep the pipeline
-// simple — WASAPI's shared-mode mixer will resample under the hood if the
+// simple. WASAPI's shared-mode mixer will resample under the hood if the
 // device's mix format differs.
 WAVEFORMATEXTENSIBLE make_format(uint32_t channels, uint32_t sample_rate) {
     WAVEFORMATEXTENSIBLE w{};
@@ -120,7 +120,7 @@ bool AudioEngine::start(OutgoingCallback outgoing) {
     _outgoing = std::move(outgoing);
 
     // The Opus encoder's bool conversion returns false until init() has
-    // succeeded, so we don't check it here — init() is the source of truth.
+    // succeeded, so we don't check it here; init() is the source of truth.
     _encoder = std::make_unique<mumble::Opus::Encoder>(1);
     if (_encoder->init(kSampleRate, mumble::Opus::Encoder::Preset::VoIP)
         != mumble::Code::Success) {
@@ -298,7 +298,7 @@ void AudioEngine::captureLoop() {
     }
 
     if (!devIsFloat) {
-        audio_log("capture: device mix format is not IEEE_FLOAT — capture disabled");
+        audio_log("capture: device mix format is not IEEE_FLOAT, capture disabled");
         CoTaskMemFree(mixFormat);
         cleanup();
         return;
@@ -425,7 +425,7 @@ void AudioEngine::captureLoop() {
                 // as terminator so other clients see us stop talking.
                 _outgoing(std::move(payload), fn, true);
             }
-            // else: stay silent — don't send anything.
+            // else: stay silent; don't send anything.
         }
         wasTransmitting = nowTransmitting;
     }
@@ -501,7 +501,7 @@ void AudioEngine::renderLoop() {
         audio_log(buf);
     }
     if (!devIsFloat) {
-        audio_log("render: mix format not IEEE_FLOAT — playback disabled");
+        audio_log("render: mix format not IEEE_FLOAT, playback disabled");
         CoTaskMemFree(mixFormat);
         cleanup();
         return;

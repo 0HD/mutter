@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Tracks which channels the user has manually collapsed. Channels default to
-/// expanded — only collapsed IDs are remembered.
+/// expanded; only collapsed IDs are remembered.
 class ChannelExpansionNotifier extends Notifier<Set<int>> {
   @override
   Set<int> build() => const {};

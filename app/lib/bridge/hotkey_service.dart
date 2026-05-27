@@ -5,7 +5,7 @@ import 'bindings.dart' as nb;
 
 /// Routes the push-to-talk binding to a system-wide low-level keyboard hook
 /// installed by the native bridge. We can't use Windows' RegisterHotKey for
-/// PTT because it only delivers presses, not releases — the bridge's
+/// PTT because it only delivers presses, not releases. The bridge's
 /// WH_KEYBOARD_LL hook sees both edges of the key.
 class HotkeyService {
   HotkeyService(this._ref);
